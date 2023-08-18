@@ -52,12 +52,17 @@ pub fn main() !void {
         std.process.exit(1);
     }
 
+    var any_errors = false;
     for (res.positionals) |arg| {
         if (readWavInfo(arg)) |info| {
             _ = try out_writer.print("{s}: {}\n", .{ arg, info });
         } else |err| {
+            any_errors = true;
             _ = try err_writer.print("{s}: {}\n", .{ arg, err });
         }
+    }
+    if (any_errors) {
+        std.process.exit(1);
     }
 }
 
