@@ -1,7 +1,11 @@
 const std = @import("std");
+const builtin = @import("builtin");
 
 fn writeUsage(f: *const std.fs.File) !void {
-    _ = try f.writer().write("TODO: print usage...");
+    _ = try f.writer().print(
+        "TODO: print usage...\ncompiled with zig {s}\n",
+        .{builtin.zig_version_string},
+    );
 }
 
 pub fn main() !void {
