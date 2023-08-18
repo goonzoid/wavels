@@ -1,32 +1,58 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const clap = @import("clap");
 
-fn writeUsage(f: *const std.fs.File) !void {
-    _ = try f.writer().print(
-        "TODO: print usage...\ncompiled with zig {s}\n",
-        .{builtin.zig_version_string},
-    );
-}
+const version = "0.1.0";
+const help_header_fmt =
+    \\wavels {s}
+    \\
+    \\USAGE:
+    \\    wavels [flags] [wav_file ...]
+    \\
+    \\FLAGS:
+    \\    -h, --help             display this help info
+    \\    -v, --version          display version info
+    \\
+;
+// some duplication here, but it was the only way to get the help output
+// to be printed without the "<str>..." part
+const params = clap.parseParamsComptime(
+    \\-h, --help
+    \\-v, --version
+    \\<str>...
+);
 
 pub fn main() !void {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
+    const out_writer = std.io.getStdOut().writer();
+    const err_writer = std.io.getStdErr().writer();
 
-    const args = try std.process.argsAlloc(allocator);
-    const stdout = std.io.getStdOut();
+    const res = clap.parse(clap.Help, &params, clap.parsers.default, .{}) catch |err|
+        switch (err) {
+        error.InvalidArgument => {
+            _ = try err_writer.print(help_header_fmt, .{version});
+            std.process.exit(1);
+        },
+        else => return err,
+    };
+    defer res.deinit();
 
-    if (args.len <= 1 or
-        std.mem.eql(u8, args[1], "-h") or
-        std.mem.eql(u8, args[1], "--help"))
-    {
-        try writeUsage(&stdout);
+    if (res.args.version != 0) {
+        _ = try out_writer.print(
+            "wavels {s}\nbuilt with zig {s}",
+            .{ version, builtin.zig_version_string },
+        );
         std.process.exit(0);
     }
+    if (res.args.help != 0) {
+        _ = try out_writer.print(help_header_fmt, .{version});
+        std.process.exit(0);
+    }
+    if (res.positionals.len == 0) {
+        _ = try err_writer.print(help_header_fmt, .{version});
+        std.process.exit(1);
+    }
 
-    const out_writer = stdout.writer();
-    const err_writer = std.io.getStdErr().writer();
-    for (args[1..]) |arg| {
+    for (res.positionals) |arg| {
         if (readWavInfo(arg)) |info| {
             _ = try out_writer.print("{s}: {}\n", .{ arg, info });
         } else |err| {
