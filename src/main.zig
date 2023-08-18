@@ -78,10 +78,21 @@ const WavInfo = struct {
         comptime _: []const u8,
         _: std.fmt.FormatOptions,
         writer: anytype,
-    ) std.os.WriteError!void {
+    ) !void {
+        const channel_count = switch (value.channels) {
+            1 => "mono",
+            2 => "stereo",
+            else => |count| blk: {
+                // max wav channel count is 65535
+                // "65535 channels" is 14 bytes
+                var buf: [14]u8 = undefined;
+                const result = try std.fmt.bufPrint(&buf, "{d} channels", .{count});
+                break :blk result;
+            },
+        };
         return writer.print(
-            "{d} channels {d} khz {d} bit",
-            .{ value.channels, value.sample_rate, value.bit_depth },
+            "{s} {d} khz {d} bit",
+            .{ channel_count, value.sample_rate, value.bit_depth },
         );
     }
 };
