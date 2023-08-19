@@ -96,8 +96,6 @@ fn hasWavExt(name: []const u8) bool {
     return false;
 }
 
-const ro_flag = std.fs.File.OpenFlags{ .mode = std.fs.File.OpenMode.read_only };
-
 const WavInfo = struct {
     sample_rate: u32,
     bit_depth: u16,
@@ -134,15 +132,16 @@ const WavHeaderError = error{
     InvalidSubchunk1Start,
 };
 
-const hdrSize: usize = 36;
+const hdr_size: usize = 36;
+const ro_flag = std.fs.File.OpenFlags{ .mode = std.fs.File.OpenMode.read_only };
 
 fn readWavInfo(path: []const u8) !WavInfo {
     const f = try std.fs.cwd().openFile(path, ro_flag);
     defer f.close();
 
-    var buf: [hdrSize]u8 = undefined;
+    var buf: [hdr_size]u8 = undefined;
     const read = try f.readAll(&buf);
-    if (read < hdrSize) {
+    if (read < hdr_size) {
         return WavHeaderError.ShortRead;
     }
 
@@ -157,7 +156,7 @@ fn readWavInfo(path: []const u8) !WavInfo {
         return WavHeaderError.InvalidSubchunk1Start;
     }
 
-    return WavInfo{
+    return .{
         .channels = std.mem.bytesToValue(u16, buf[22..24]),
         .sample_rate = std.mem.bytesToValue(u32, buf[24..28]),
         .bit_depth = std.mem.bytesToValue(u16, buf[34..36]),
