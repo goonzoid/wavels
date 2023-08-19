@@ -53,7 +53,7 @@ pub fn main() !void {
     const allocator = arena.allocator();
 
     const files: []const []const u8 = switch (res.positionals.len) {
-        0 => try getFileList(allocator),
+        0 => try getFiles(allocator),
         else => res.positionals,
     };
 
@@ -69,20 +69,31 @@ pub fn main() !void {
     if (any_errors) std.process.exit(1);
 }
 
-fn getFileList(allocator: std.mem.Allocator) ![]const []const u8 {
+fn getFiles(allocator: std.mem.Allocator) ![]const []const u8 {
     var dir = try std.fs.cwd().openIterableDir(".", .{});
     defer dir.close();
+    var it = dir.iterate();
 
     var files = std.ArrayList([]const u8).init(allocator);
-    var it = dir.iterate();
     while (try it.next()) |f| {
-        const len = f.name.len;
-        if (len >= 5 and std.mem.eql(u8, f.name[len - 4 .. len], ".wav")) {
+        if (hasWavExt(f.name)) {
             const n = try allocator.dupe(u8, f.name);
             try files.append(n);
         }
     }
     return files.items;
+}
+
+const wavExtensions = [_][]const u8{ "wav", "WAV", "wave", "WAVE" };
+
+fn hasWavExt(name: []const u8) bool {
+    if (std.mem.lastIndexOf(u8, name, ".")) |i| {
+        const ext = name[i + 1 .. name.len];
+        for (wavExtensions) |w| {
+            if (std.mem.eql(u8, ext, w)) return true;
+        }
+    }
+    return false;
 }
 
 const ro_flag = std.fs.File.OpenFlags{ .mode = std.fs.File.OpenMode.read_only };
