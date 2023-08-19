@@ -104,14 +104,14 @@ const WavHeaderError = error{
     InvalidSubchunk1Start,
 };
 
-const headerBufSize: usize = 36;
+const hdrSize: usize = 36;
 
 fn readWavInfo(path: []const u8) !WavInfo {
     const f = try std.fs.cwd().openFile(path, ro_flag);
-    var buf: [headerBufSize]u8 = undefined;
+    var buf: [hdrSize]u8 = undefined;
 
     const read = try f.readAll(&buf);
-    if (read < headerBufSize) {
+    if (read < hdrSize) {
         return WavHeaderError.ShortRead;
     }
 
