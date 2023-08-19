@@ -47,23 +47,42 @@ pub fn main() !void {
         _ = try out_writer.print(help_header_fmt, .{version});
         std.process.exit(0);
     }
-    if (res.positionals.len == 0) {
-        _ = try err_writer.print(help_header_fmt, .{version});
-        std.process.exit(1);
-    }
+
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const files: []const []const u8 = switch (res.positionals.len) {
+        0 => try getFileList(allocator),
+        else => res.positionals,
+    };
 
     var any_errors = false;
-    for (res.positionals) |arg| {
-        if (readWavInfo(arg)) |info| {
-            _ = try out_writer.print("{s}: {}\n", .{ arg, info });
+    for (files) |file| {
+        if (readWavInfo(file)) |info| {
+            _ = try out_writer.print("{s}: {}\n", .{ file, info });
         } else |err| {
             any_errors = true;
-            _ = try err_writer.print("{s}: {}\n", .{ arg, err });
+            _ = try err_writer.print("{s}: {}\n", .{ file, err });
         }
     }
-    if (any_errors) {
-        std.process.exit(1);
+    if (any_errors) std.process.exit(1);
+}
+
+fn getFileList(allocator: std.mem.Allocator) ![]const []const u8 {
+    var dir = try std.fs.cwd().openIterableDir(".", .{});
+    defer dir.close();
+
+    var files = std.ArrayList([]const u8).init(allocator);
+    var it = dir.iterate();
+    while (try it.next()) |f| {
+        const len = f.name.len;
+        if (len >= 5 and std.mem.eql(u8, f.name[len - 4 .. len], ".wav")) {
+            const n = try allocator.dupe(u8, f.name);
+            try files.append(n);
+        }
     }
+    return files.items;
 }
 
 const ro_flag = std.fs.File.OpenFlags{ .mode = std.fs.File.OpenMode.read_only };
