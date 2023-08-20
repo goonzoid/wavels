@@ -10,26 +10,28 @@ const help_header_fmt =
     \\    wavels [flags] [wav_file ...]
     \\
     \\FLAGS:
-    \\    -h, --help             display this help info
-    \\    -v, --version          display version info
+    \\    -c, --count           show counts, grouped by sample rate, bit depth, and channel count
+    \\    -h, --help            show this help info
+    \\    -v, --version         show version info
     \\
 ;
 // some duplication here, but it was the only way to get the help output
 // to be printed without the "<str>..." part
 const params = clap.parseParamsComptime(
+    \\-c, --count
     \\-h, --help
     \\-v, --version
     \\<str>...
 );
 
 pub fn main() !void {
-    const out_writer = std.io.getStdOut().writer();
-    const err_writer = std.io.getStdErr().writer();
+    const stdout = std.io.getStdOut();
+    const stderr = std.io.getStdErr();
 
     const res = clap.parse(clap.Help, &params, clap.parsers.default, .{}) catch |err|
         switch (err) {
         error.InvalidArgument => {
-            _ = try err_writer.print(help_header_fmt, .{version});
+            _ = try stderr.writer().print(help_header_fmt, .{version});
             std.process.exit(1);
         },
         else => return err,
@@ -37,14 +39,14 @@ pub fn main() !void {
     defer res.deinit();
 
     if (res.args.version != 0) {
-        _ = try out_writer.print(
+        _ = try stdout.writer().print(
             "wavels {s}\nbuilt with zig {s}",
             .{ version, builtin.zig_version_string },
         );
         std.process.exit(0);
     }
     if (res.args.help != 0) {
-        _ = try out_writer.print(help_header_fmt, .{version});
+        _ = try stdout.writer().print(help_header_fmt, .{version});
         std.process.exit(0);
     }
 
@@ -57,15 +59,11 @@ pub fn main() !void {
         else => res.positionals,
     };
 
-    var any_errors = false;
-    for (files) |file| {
-        if (readWavInfo(file)) |info| {
-            _ = try out_writer.print("{s}: {}\n", .{ file, info });
-        } else |err| {
-            any_errors = true;
-            _ = try err_writer.print("{s}: {}\n", .{ file, err });
-        }
-    }
+    var any_errors = if (res.args.count != 0)
+        try showCounts(allocator, files, stdout, stderr)
+    else
+        try showList(files, stdout, stderr);
+
     if (any_errors) std.process.exit(1);
 }
 
@@ -96,33 +94,104 @@ fn hasWavExt(name: []const u8) bool {
     return false;
 }
 
-const WavInfo = struct {
+fn showList(
+    files: []const []const u8,
+    stdout: std.fs.File,
+    stderr: std.fs.File,
+) !bool {
+    var any_errors = false;
+    for (files) |file| {
+        if (readWavInfo(file)) |info| {
+            _ = try stdout.writer().print(
+                "{s}\t{d} khz {d} bit {s}\n",
+                .{ file, info.sample_rate, info.bit_depth, try channelCount(info.channels) },
+            );
+        } else |err| {
+            any_errors = true;
+            _ = try stderr.writer().print("{s}: {}\n", .{ file, err });
+        }
+    }
+    return any_errors;
+}
+
+fn showCounts(
+    allocator: std.mem.Allocator,
+    files: []const []const u8,
+    stdout: std.fs.File,
+    stderr: std.fs.File,
+) !bool {
+    var any_errors = false;
+    var counters = std.ArrayList(*Counter).init(allocator);
+
+    for (files) |file| {
+        if (readWavInfo(file)) |info| {
+            var counted = false;
+            for (counters.items) |counter| {
+                if (counter.matches(info)) {
+                    counter.count += 1;
+                    counted = true;
+                    continue;
+                }
+            }
+            if (!counted) {
+                var counter = Counter.init(info);
+                try counters.append(&counter);
+            }
+        } else |err| {
+            any_errors = true;
+            _ = try stderr.writer().print("{s}: {}\n", .{ file, err });
+        }
+    }
+
+    for (counters.items) |counter| {
+        _ = try stdout.writer().print(
+            "{d}\t{d} khz {d} bit {s}\n",
+            .{ counter.count, counter.sample_rate, counter.bit_depth, try channelCount(counter.channels) },
+        );
+    }
+    return any_errors;
+}
+
+const Counter = struct {
+    count: u32,
     sample_rate: u32,
     bit_depth: u16,
     channels: u16,
 
-    pub fn format(
-        value: @This(),
-        comptime _: []const u8,
-        _: std.fmt.FormatOptions,
-        writer: anytype,
-    ) !void {
-        const channel_count = switch (value.channels) {
-            1 => "mono",
-            2 => "stereo",
-            else => |count| blk: {
-                // max wav channel count is 65535
-                // "65535 channels" is 14 bytes
-                var buf: [14]u8 = undefined;
-                const result = try std.fmt.bufPrint(&buf, "{d} channels", .{count});
-                break :blk result;
-            },
+    fn init(wi: WavInfo) @This() {
+        return .{
+            .count = 1,
+            .sample_rate = wi.sample_rate,
+            .bit_depth = wi.bit_depth,
+            .channels = wi.channels,
         };
-        return writer.print(
-            "{s} {d} khz {d} bit",
-            .{ channel_count, value.sample_rate, value.bit_depth },
-        );
     }
+
+    fn matches(self: @This(), wi: WavInfo) bool {
+        return self.sample_rate == wi.sample_rate and
+            self.bit_depth == wi.bit_depth and
+            self.channels == wi.channels;
+    }
+};
+
+fn channelCount(count: u16) ![]const u8 {
+    return switch (count) {
+        1 => "mono",
+        2 => "stereo",
+        else => |c| blk: {
+            // max wav channel count is 65535
+            // "65535 channels" is 14 bytes
+            var buf: [14]u8 = undefined;
+            const result = try std.fmt.bufPrint(&buf, "{d} channels", .{c});
+            break :blk result;
+        },
+    };
+}
+
+const WavInfo = struct {
+    sample_rate: u32,
+    bit_depth: u16,
+    channels: u16,
 };
 
 const WavHeaderError = error{
