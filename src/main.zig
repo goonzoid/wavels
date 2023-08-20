@@ -160,19 +160,19 @@ const Counter = struct {
     bit_depth: u16,
     channels: u16,
 
-    fn init(wi: wav.WavInfo) @This() {
+    fn init(info: wav.WavInfo) @This() {
         return .{
             .count = 1,
-            .sample_rate = wi.sample_rate,
-            .bit_depth = wi.bit_depth,
-            .channels = wi.channels,
+            .sample_rate = info.sample_rate,
+            .bit_depth = info.bit_depth,
+            .channels = info.channels,
         };
     }
 
-    fn matches(self: @This(), wi: wav.WavInfo) bool {
-        return self.sample_rate == wi.sample_rate and
-            self.bit_depth == wi.bit_depth and
-            self.channels == wi.channels;
+    fn matches(self: @This(), other: wav.WavInfo) bool {
+        return self.sample_rate == other.sample_rate and
+            self.bit_depth == other.bit_depth and
+            self.channels == other.channels;
     }
 };
 
