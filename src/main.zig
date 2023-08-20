@@ -2,6 +2,8 @@ const std = @import("std");
 const builtin = @import("builtin");
 const clap = @import("clap");
 
+const wav = @import("./wav.zig");
+
 const version = "0.1.0";
 const help_header_fmt =
     \\wavels {s}
@@ -101,7 +103,7 @@ fn showList(
 ) !bool {
     var any_errors = false;
     for (files) |file| {
-        if (readWavInfo(file)) |info| {
+        if (wav.readInfo(file)) |info| {
             _ = try stdout.writer().print(
                 "{s}\t{d} khz {d} bit {s}\n",
                 .{ file, info.sample_rate, info.bit_depth, try channelCount(info.channels) },
@@ -124,7 +126,7 @@ fn showCounts(
     var counters = std.ArrayList(*Counter).init(allocator);
 
     for (files) |file| {
-        if (readWavInfo(file)) |info| {
+        if (wav.readInfo(file)) |info| {
             var counted = false;
             for (counters.items) |counter| {
                 if (counter.matches(info)) {
@@ -158,7 +160,7 @@ const Counter = struct {
     bit_depth: u16,
     channels: u16,
 
-    fn init(wi: WavInfo) @This() {
+    fn init(wi: wav.WavInfo) @This() {
         return .{
             .count = 1,
             .sample_rate = wi.sample_rate,
@@ -167,7 +169,7 @@ const Counter = struct {
         };
     }
 
-    fn matches(self: @This(), wi: WavInfo) bool {
+    fn matches(self: @This(), wi: wav.WavInfo) bool {
         return self.sample_rate == wi.sample_rate and
             self.bit_depth == wi.bit_depth and
             self.channels == wi.channels;
@@ -185,49 +187,5 @@ fn channelCount(count: u16) ![]const u8 {
             const result = try std.fmt.bufPrint(&buf, "{d} channels", .{c});
             break :blk result;
         },
-    };
-}
-
-const WavInfo = struct {
-    sample_rate: u32,
-    bit_depth: u16,
-    channels: u16,
-};
-
-const WavHeaderError = error{
-    ShortRead,
-    InvalidChunkID,
-    InvalidFormat,
-    InvalidSubchunk1Start,
-};
-
-const hdr_size: usize = 36;
-const ro_flag = std.fs.File.OpenFlags{ .mode = std.fs.File.OpenMode.read_only };
-
-fn readWavInfo(path: []const u8) !WavInfo {
-    const f = try std.fs.cwd().openFile(path, ro_flag);
-    defer f.close();
-
-    var buf: [hdr_size]u8 = undefined;
-    const read = try f.readAll(&buf);
-    if (read < hdr_size) {
-        return WavHeaderError.ShortRead;
-    }
-
-    if (!std.mem.eql(u8, buf[0..4], "RIFF")) {
-        return WavHeaderError.InvalidChunkID;
-    }
-    if (!std.mem.eql(u8, buf[8..12], "WAVE")) {
-        return WavHeaderError.InvalidFormat;
-    }
-    // Subchunk1ID ("fmt "), Subchunk1Size (16, 4 bytes), AudioFormat (1, 2 bytes)
-    if (!std.mem.eql(u8, buf[12..22], "fmt \x10\x00\x00\x00\x01\x00")) {
-        return WavHeaderError.InvalidSubchunk1Start;
-    }
-
-    return .{
-        .channels = std.mem.bytesToValue(u16, buf[22..24]),
-        .sample_rate = std.mem.bytesToValue(u32, buf[24..28]),
-        .bit_depth = std.mem.bytesToValue(u16, buf[34..36]),
     };
 }
