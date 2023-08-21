@@ -132,7 +132,7 @@ fn showCounts(
                 if (counter.matches(info)) {
                     counter.count += 1;
                     counted = true;
-                    continue;
+                    break;
                 }
             }
             if (!counted) {
