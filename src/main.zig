@@ -9,7 +9,7 @@ const help_header_fmt =
     \\wavels {s}
     \\
     \\USAGE:
-    \\    wavels [flags] [wav_file ...]
+    \\    wavels [flags] [wav_file|directory ...]
     \\
     \\FLAGS:
     \\    -c, --count           show counts, grouped by sample rate, bit depth, and channel count
@@ -57,8 +57,8 @@ pub fn main() !void {
     const allocator = arena.allocator();
 
     const files: []const []const u8 = switch (res.positionals.len) {
-        0 => try getFiles(allocator),
-        else => res.positionals,
+        0 => try getWavFiles(allocator, "."),
+        else => try getWavFileFromArgs(allocator, res.positionals, stderr),
     };
 
     var any_errors = if (res.args.count != 0)
@@ -69,19 +69,47 @@ pub fn main() !void {
     if (any_errors) std.process.exit(1);
 }
 
-fn getFiles(allocator: std.mem.Allocator) ![]const []const u8 {
-    var dir = try std.fs.cwd().openIterableDir(".", .{});
+fn getWavFileFromArgs(allocator: std.mem.Allocator, args: []const []const u8, stderr: std.fs.File) ![]const []const u8 {
+    var list = std.ArrayList([]const u8).init(allocator);
+    for (args) |path| {
+        if (hasWavExt(path)) {
+            try list.append(path);
+        } else if (try isDir(path)) {
+            try list.appendSlice(try getWavFiles(allocator, path));
+        } else {
+            try stderr.writer().print("{s} - unsupported file type", .{path});
+        }
+    }
+    return list.items;
+}
+
+fn getWavFiles(allocator: std.mem.Allocator, path: []const u8) ![]const []const u8 {
+    var dir = try std.fs.cwd().openIterableDir(path, .{});
     defer dir.close();
     var it = dir.iterate();
 
     var files = std.ArrayList([]const u8).init(allocator);
     while (try it.next()) |f| {
         if (hasWavExt(f.name)) {
-            const n = try allocator.dupe(u8, f.name);
-            try files.append(n);
+            const file_path = try dotlessRelativePath(allocator, path, f.name);
+            try files.append(file_path);
         }
     }
     return files.items;
+}
+
+fn dotlessRelativePath(allocator: std.mem.Allocator, dir_path: []const u8, filename: []const u8) ![]const u8 {
+    if (std.mem.eql(u8, dir_path, ".")) {
+        return try allocator.dupe(u8, filename);
+    }
+    return try std.fmt.allocPrint(allocator, "{s}/{s}", .{ dir_path, filename });
+}
+
+fn isDir(path: []const u8) !bool {
+    var dir = try std.fs.cwd().openDir(path, .{});
+    defer dir.close();
+    const stat = try dir.stat();
+    return stat.kind == std.fs.File.Kind.directory;
 }
 
 const wavExtensions = [_][]const u8{ "wav", "WAV", "wave", "WAVE" };
