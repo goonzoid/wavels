@@ -12,6 +12,7 @@ USAGE:
 
 FLAGS:
     -c, --count           show counts, grouped by sample rate, bit depth, and channel count
+    -r, --recurse         recursively list subdirectories
     -h, --help            show this help info
     -v, --version         show version info
 ```

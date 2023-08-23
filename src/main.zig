@@ -13,6 +13,7 @@ const help_header_fmt =
     \\
     \\FLAGS:
     \\    -c, --count           show counts, grouped by sample rate, bit depth, and channel count
+    \\    -r, --recurse         recursively list subdirectories
     \\    -h, --help            show this help info
     \\    -v, --version         show version info
     \\
@@ -21,6 +22,7 @@ const help_header_fmt =
 // to be printed without the "<str>..." part
 const params = clap.parseParamsComptime(
     \\-c, --count
+    \\-r, --recurse
     \\-h, --help
     \\-v, --version
     \\<str>...
@@ -56,9 +58,10 @@ pub fn main() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
+    const recurse = res.args.recurse != 0;
     const files: []const []const u8 = switch (res.positionals.len) {
-        0 => try getWavFiles(allocator, "."),
-        else => try getWavFileFromArgs(allocator, res.positionals, stderr),
+        0 => try getWavFiles(allocator, ".", recurse),
+        else => try getWavFileFromArgs(allocator, res.positionals, stderr, recurse),
     };
 
     var any_errors = if (res.args.count != 0)
@@ -69,13 +72,13 @@ pub fn main() !void {
     if (any_errors) std.process.exit(1);
 }
 
-fn getWavFileFromArgs(allocator: std.mem.Allocator, args: []const []const u8, stderr: std.fs.File) ![]const []const u8 {
+fn getWavFileFromArgs(allocator: std.mem.Allocator, args: []const []const u8, stderr: std.fs.File, recurse: bool) ![]const []const u8 {
     var list = std.ArrayList([]const u8).init(allocator);
     for (args) |path| {
         if (hasWavExt(path)) {
             try list.append(path);
         } else if (try isDir(path)) {
-            try list.appendSlice(try getWavFiles(allocator, path));
+            try list.appendSlice(try getWavFiles(allocator, path, recurse));
         } else {
             try stderr.writer().print("{s} - unsupported file type", .{path});
         }
@@ -83,22 +86,35 @@ fn getWavFileFromArgs(allocator: std.mem.Allocator, args: []const []const u8, st
     return list.items;
 }
 
-fn getWavFiles(allocator: std.mem.Allocator, path: []const u8) ![]const []const u8 {
+fn getWavFiles(allocator: std.mem.Allocator, path: []const u8, recurse: bool) ![]const []const u8 {
     var dir = try std.fs.cwd().openIterableDir(path, .{});
     defer dir.close();
-    var it = dir.iterate();
 
     var files = std.ArrayList([]const u8).init(allocator);
-    while (try it.next()) |f| {
-        if (hasWavExt(f.name)) {
-            const file_path = try dotlessRelativePath(allocator, path, f.name);
-            try files.append(file_path);
+
+    if (recurse) {
+        var walker = try dir.walk(allocator);
+        defer walker.deinit();
+        while (try walker.next()) |we| {
+            if (hasWavExt(we.basename)) {
+                const rel_path = try dotlessRelPath(allocator, path, we.path);
+                try files.append(rel_path);
+            }
+        }
+    } else {
+        var it = dir.iterate();
+        while (try it.next()) |f| {
+            if (hasWavExt(f.name)) {
+                const rel_path = try dotlessRelPath(allocator, path, f.name);
+                try files.append(rel_path);
+            }
         }
     }
+
     return files.items;
 }
 
-fn dotlessRelativePath(allocator: std.mem.Allocator, dir_path: []const u8, filename: []const u8) ![]const u8 {
+fn dotlessRelPath(allocator: std.mem.Allocator, dir_path: []const u8, filename: []const u8) ![]const u8 {
     if (std.mem.eql(u8, dir_path, ".")) {
         return try allocator.dupe(u8, filename);
     }
@@ -151,25 +167,26 @@ fn showCounts(
     stderr: std.fs.File,
 ) !bool {
     var any_errors = false;
-    var counters = std.ArrayList(*Counter).init(allocator);
+    var counters = std.ArrayList(Counter).init(allocator);
 
     for (files) |file| {
-        if (wav.readInfo(file)) |info| {
-            var counted = false;
-            for (counters.items) |counter| {
-                if (counter.matches(info)) {
-                    counter.count += 1;
-                    counted = true;
-                    break;
-                }
-            }
-            if (!counted) {
-                var counter = Counter.init(info);
-                try counters.append(&counter);
-            }
-        } else |err| {
+        const info = wav.readInfo(file) catch |err| {
             any_errors = true;
             _ = try stderr.writer().print("{s}: {}\n", .{ file, err });
+            continue;
+        };
+
+        var counted = false;
+        for (counters.items) |*counter| {
+            if (counter.matches(info)) {
+                counter.count += 1;
+                counted = true;
+                break;
+            }
+        }
+        if (!counted) {
+            var counter = Counter.init(info);
+            try counters.append(counter);
         }
     }
 
