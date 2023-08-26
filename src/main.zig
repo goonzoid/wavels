@@ -59,15 +59,14 @@ pub fn main() !void {
     const allocator = arena.allocator();
 
     const recurse = res.args.recurse != 0;
-    const files: []const []const u8 = switch (res.positionals.len) {
+    const files = switch (res.positionals.len) {
         0 => try getWavFiles(allocator, ".", recurse),
         else => try getWavFileFromArgs(allocator, res.positionals, stderr, recurse),
     };
-
-    var any_errors = if (res.args.count != 0)
-        try showCounts(allocator, files, stdout, stderr)
-    else
-        try showList(files, stdout, stderr);
+    const any_errors = switch (res.args.count) {
+        0 => try showList(files, stdout, stderr),
+        else => try showCounts(allocator, files, stdout, stderr),
+    };
 
     if (any_errors) std.process.exit(1);
 }
