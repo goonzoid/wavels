@@ -8,14 +8,15 @@ pub const WavInfo = struct {
 
 const WavHeaderError = error{
     ShortRead,
-    InvalidChunkID,
-    InvalidFormat,
-    InvalidSubchunk1Start,
+    InvalidRIFFChunkID,
+    InvalidRIFFChunkFormat,
+    InvalidFmtChunkID,
 };
 
 const hdr_size: usize = 36;
 const ro_flag = std.fs.File.OpenFlags{ .mode = std.fs.File.OpenMode.read_only };
 
+// WARNING: this may well be broken on big endian systems
 pub fn readInfo(path: []const u8) !WavInfo {
     const f = try std.fs.cwd().openFile(path, ro_flag);
     defer f.close();
@@ -27,14 +28,13 @@ pub fn readInfo(path: []const u8) !WavInfo {
     }
 
     if (!std.mem.eql(u8, buf[0..4], "RIFF")) {
-        return WavHeaderError.InvalidChunkID;
+        return WavHeaderError.InvalidRIFFChunkID;
     }
     if (!std.mem.eql(u8, buf[8..12], "WAVE")) {
-        return WavHeaderError.InvalidFormat;
+        return WavHeaderError.InvalidRIFFChunkFormat;
     }
-    // Subchunk1ID ("fmt "), Subchunk1Size (16, 4 bytes), AudioFormat (1, 2 bytes)
-    if (!std.mem.eql(u8, buf[12..22], "fmt \x10\x00\x00\x00\x01\x00")) {
-        return WavHeaderError.InvalidSubchunk1Start;
+    if (!std.mem.eql(u8, buf[12..16], "fmt ")) {
+        return WavHeaderError.InvalidFmtChunkID;
     }
 
     return .{
