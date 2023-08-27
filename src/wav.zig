@@ -10,45 +10,45 @@ const WavHeaderError = error{
     ShortRead,
     InvalidRIFFChunkID,
     InvalidRIFFChunkFormat,
-    InvalidFmtChunkID,
+    InvalidChunkID,
 };
 
-const ro_flag = std.fs.File.OpenFlags{ .mode = std.fs.File.OpenMode.read_only };
-
-const riff_chunk_size: usize = 12;
-const chunk_start_size: usize = 8;
-const fmt_chunk_size: usize = 16;
-
-// WARNING: this may well be broken on big endian systems
+// WARNING: this is likely broken on big endian systems
 pub fn readInfo(path: []const u8) !WavInfo {
     const f = try std.fs.cwd().openFile(path, ro_flag);
     defer f.close();
 
+    // the RIFF chunk is a special case since the size is
+    // fixed, and not included in the chunk itself
     try validateRIFFChunk(f);
 
-    var chunk_start: [chunk_start_size]u8 = undefined;
-
-    // there must be a nicer way to do this, but let's make this more complete
-    // first and then do some profiling
     while (true) {
-        var read = try f.readAll(&chunk_start);
-        if (read < chunk_start_size) {
-            return WavHeaderError.ShortRead;
-        }
-
-        if (std.mem.eql(u8, chunk_start[0..4], "fmt ")) {
-            return readFmtChunk(f);
-        } else if (std.mem.eql(u8, chunk_start[0..4], "JUNK")) {
-            try f.seekBy(@as(i64, std.mem.bytesToValue(u32, chunk_start[4..8])));
-        } else {
-            return WavHeaderError.InvalidFmtChunkID;
+        const chunk_info = try nextChunkInfo(f);
+        switch (chunk_info.id) {
+            fmt => return readFmtChunk(f),
+            junk => try f.seekBy(@as(i64, chunk_info.size)),
+            else => return WavHeaderError.InvalidChunkID,
         }
     }
 }
 
-// this function assumes that f has not yet been read, and therefore the offset
-// is at the start of the file
-// TODO: optionally print debug output when we see invalid data
+const ro_flag = std.fs.File.OpenFlags{ .mode = std.fs.File.OpenMode.read_only };
+
+const riff_chunk_size: usize = 12;
+const fmt_chunk_size: usize = 16;
+
+const ChunkInfo = packed struct {
+    id: u32,
+    size: u32,
+};
+
+// TODO: can these be an enum?
+const fmt = 0x20746d66;
+const junk = 0x4b4e554a;
+
+// NOTE: each of these functions assumes that the file offset is in the correct
+// place (e.g. 0 for the RIFF chunk, or at the start of a new chunk for nextChunkInfo)
+
 fn validateRIFFChunk(f: std.fs.File) !void {
     var buf: [riff_chunk_size]u8 = undefined;
     const read = try f.readAll(&buf);
@@ -63,8 +63,16 @@ fn validateRIFFChunk(f: std.fs.File) !void {
     }
 }
 
-// this function assumes that f is already at the correct offset for the start
-// of the fmt chunk data
+fn nextChunkInfo(f: std.fs.File) !ChunkInfo {
+    const size = @sizeOf(ChunkInfo);
+    var buf: [size]u8 = undefined;
+    var read = try f.readAll(&buf);
+    if (read < size) {
+        return WavHeaderError.ShortRead;
+    }
+    return @bitCast(buf);
+}
+
 fn readFmtChunk(f: std.fs.File) !WavInfo {
     var buf: [fmt_chunk_size]u8 = undefined;
     const read = try f.readAll(&buf);
