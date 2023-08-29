@@ -31,6 +31,7 @@ const ChunkInfo = packed struct(u64) {
 
 // WARNING: this is likely broken on big endian systems
 pub fn readInfo(path: []const u8) !WavInfo {
+    const ro_flag = comptime std.fs.File.OpenFlags{ .mode = std.fs.File.OpenMode.read_only };
     const f = try std.fs.cwd().openFile(path, ro_flag);
     defer f.close();
 
@@ -48,15 +49,11 @@ pub fn readInfo(path: []const u8) !WavInfo {
     }
 }
 
-const ro_flag = std.fs.File.OpenFlags{ .mode = std.fs.File.OpenMode.read_only };
-
-const riff_chunk_size: usize = 12;
-const fmt_chunk_size: usize = 16;
-
 // NOTE: each of these functions assumes that the file offset is in the correct
 // place (e.g. 0 for the RIFF chunk, or at the start of a new chunk for nextChunkInfo)
 
 fn validateRIFFChunk(f: std.fs.File) !void {
+    const riff_chunk_size: usize = comptime 12;
     var buf: [riff_chunk_size]u8 = undefined;
     const read = try f.readAll(&buf);
     if (read < riff_chunk_size) {
@@ -81,9 +78,11 @@ fn nextChunkInfo(f: std.fs.File) !ChunkInfo {
 }
 
 fn readFmtChunk(f: std.fs.File) !WavInfo {
-    var buf: [fmt_chunk_size]u8 = undefined;
+    // fmt chunks can be > 16, but this is enough to get the fields we need
+    const min_chunk_size: usize = comptime 16;
+    var buf: [min_chunk_size]u8 = undefined;
     const read = try f.readAll(&buf);
-    if (read < fmt_chunk_size) {
+    if (read < min_chunk_size) {
         return WavHeaderError.ShortRead;
     }
     return .{
