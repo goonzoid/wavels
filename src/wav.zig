@@ -13,6 +13,22 @@ const WavHeaderError = error{
     InvalidChunkID,
 };
 
+const ChunkID = enum(u32) {
+    // these are reversed, because endianness
+    fmt = 0x20746d66, // " tmf"
+    junk = 0x4b4e554a, // "knuj"
+    unknown = 0x0,
+};
+
+const ChunkInfo = packed struct(u64) {
+    id_int: u32,
+    size: u32,
+
+    fn id(self: @This()) ChunkID {
+        return std.meta.intToEnum(ChunkID, self.id_int) catch ChunkID.unknown;
+    }
+};
+
 // WARNING: this is likely broken on big endian systems
 pub fn readInfo(path: []const u8) !WavInfo {
     const f = try std.fs.cwd().openFile(path, ro_flag);
@@ -24,10 +40,10 @@ pub fn readInfo(path: []const u8) !WavInfo {
 
     while (true) {
         const chunk_info = try nextChunkInfo(f);
-        switch (chunk_info.id) {
-            fmt => return readFmtChunk(f),
-            junk => try f.seekBy(@as(i64, chunk_info.size)),
-            else => return WavHeaderError.InvalidChunkID,
+        switch (chunk_info.id()) {
+            ChunkID.fmt => return readFmtChunk(f),
+            ChunkID.junk => try f.seekBy(@as(i64, chunk_info.size)),
+            ChunkID.unknown => return WavHeaderError.InvalidChunkID,
         }
     }
 }
@@ -36,15 +52,6 @@ const ro_flag = std.fs.File.OpenFlags{ .mode = std.fs.File.OpenMode.read_only };
 
 const riff_chunk_size: usize = 12;
 const fmt_chunk_size: usize = 16;
-
-const ChunkInfo = packed struct {
-    id: u32,
-    size: u32,
-};
-
-// TODO: can these be an enum?
-const fmt = 0x20746d66;
-const junk = 0x4b4e554a;
 
 // NOTE: each of these functions assumes that the file offset is in the correct
 // place (e.g. 0 for the RIFF chunk, or at the start of a new chunk for nextChunkInfo)
