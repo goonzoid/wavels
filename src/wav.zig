@@ -18,6 +18,7 @@ const ChunkID = enum(u32) {
     // these are reversed, because endianness
     fmt = 0x20746d66, // " tmf"
     bext = 0x74786562, // "txeb"
+    id3 = 0x20336469, // " 3di"
     fake = 0x656b6146, // "ekaF"
     junk = 0x4b4e554a, // "knuj"
     unknown = 0x0,
@@ -48,6 +49,7 @@ pub fn readInfo(path: []const u8, err_info: []u8) !WavInfo {
         switch (chunk_info.id()) {
             ChunkID.fmt => return readFmtChunk(f),
             ChunkID.bext => try evenSeek(f, chunk_info.size),
+            ChunkID.id3 => try evenSeek(f, chunk_info.size),
             ChunkID.fake => try evenSeek(f, chunk_info.size),
             ChunkID.junk => try evenSeek(f, chunk_info.size),
             ChunkID.unknown => {
