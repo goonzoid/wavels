@@ -47,15 +47,20 @@ pub fn readInfo(path: []const u8, err_info: []u8) !WavInfo {
         const chunk_info = try nextChunkInfo(f);
         switch (chunk_info.id()) {
             ChunkID.fmt => return readFmtChunk(f),
-            ChunkID.bext => try f.seekBy(@as(i64, chunk_info.size)),
-            ChunkID.fake => try f.seekBy(@as(i64, chunk_info.size)),
-            ChunkID.junk => try f.seekBy(@as(i64, chunk_info.size)),
+            ChunkID.bext => try evenSeek(f, chunk_info.size),
+            ChunkID.fake => try evenSeek(f, chunk_info.size),
+            ChunkID.junk => try evenSeek(f, chunk_info.size),
             ChunkID.unknown => {
                 @memcpy(err_info[0..4], &std.mem.toBytes(chunk_info.id_int));
                 return WavHeaderError.InvalidChunkID;
             },
         }
     }
+}
+
+fn evenSeek(file: std.fs.File, offset: u32) !void {
+    const o: i64 = if (offset & 1 == 1) offset + 1 else offset;
+    try file.seekBy(o);
 }
 
 // NOTE: each of these functions assumes that the file offset is in the correct
