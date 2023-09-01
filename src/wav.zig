@@ -6,6 +6,7 @@ pub const WavInfo = struct {
     channels: u16,
 };
 
+pub const max_err_info_size = 4;
 const WavHeaderError = error{
     ShortRead,
     InvalidRIFFChunkID,
@@ -29,8 +30,9 @@ const ChunkInfo = packed struct(u64) {
     }
 };
 
+// use max_err_info_size to ensure err_info will always have capacity for any error info
 // WARNING: this is likely broken on big endian systems
-pub fn readInfo(path: []const u8) !WavInfo {
+pub fn readInfo(path: []const u8, err_info: []u8) !WavInfo {
     const ro_flag = comptime std.fs.File.OpenFlags{ .mode = std.fs.File.OpenMode.read_only };
     const f = try std.fs.cwd().openFile(path, ro_flag);
     defer f.close();
@@ -44,7 +46,10 @@ pub fn readInfo(path: []const u8) !WavInfo {
         switch (chunk_info.id()) {
             ChunkID.fmt => return readFmtChunk(f),
             ChunkID.junk => try f.seekBy(@as(i64, chunk_info.size)),
-            ChunkID.unknown => return WavHeaderError.InvalidChunkID,
+            ChunkID.unknown => {
+                @memcpy(err_info[0..4], &std.mem.toBytes(chunk_info.id_int));
+                return WavHeaderError.InvalidChunkID;
+            },
         }
     }
 }

@@ -146,14 +146,15 @@ fn showList(
 ) !bool {
     var any_errors = false;
     for (files) |file| {
-        if (wav.readInfo(file)) |info| {
+        var err_info: [wav.max_err_info_size]u8 = undefined;
+        if (wav.readInfo(file, &err_info)) |info| {
             _ = try stdout.writer().print(
                 "{s}\t{d} khz {d} bit {s}\n",
                 .{ file, info.sample_rate, info.bit_depth, try channelCount(info.channels) },
             );
         } else |err| {
             any_errors = true;
-            _ = try stderr.writer().print("{s}: {}\n", .{ file, err });
+            _ = try stderr.writer().print("{s} {}: {s}\n", .{ file, err, err_info });
         }
     }
     return any_errors;
@@ -169,9 +170,10 @@ fn showCounts(
     var counters = std.ArrayList(Counter).init(allocator);
 
     for (files) |file| {
-        const info = wav.readInfo(file) catch |err| {
+        var err_info: [wav.max_err_info_size]u8 = undefined;
+        const info = wav.readInfo(file, &err_info) catch |err| {
             any_errors = true;
-            _ = try stderr.writer().print("{s}: {}\n", .{ file, err });
+            _ = try stderr.writer().print("{s} {}: {s}\n", .{ file, err, err_info });
             continue;
         };
 
