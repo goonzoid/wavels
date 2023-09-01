@@ -60,9 +60,9 @@ pub fn readInfo(path: []const u8, err_info: []u8) !WavInfo {
     }
 }
 
-fn evenSeek(file: std.fs.File, offset: u32) !void {
+fn evenSeek(f: std.fs.File, offset: u32) !void {
     const o: i64 = if (offset & 1 == 1) offset + 1 else offset;
-    try file.seekBy(o);
+    try f.seekBy(o);
 }
 
 // NOTE: each of these functions assumes that the file offset is in the correct
