@@ -40,9 +40,12 @@ pub fn readInfo(path: []const u8, err_info: []u8) !WavInfo {
     const f = try std.fs.cwd().openFile(path, ro_flag);
     defer f.close();
 
+    // void the err_info so we don't report nonsense if we have an unanticipated error
+    @memcpy(err_info, "void");
+
     // the RIFF chunk is a special case since the size is
     // fixed, and not included in the chunk itself
-    try validateRIFFChunk(f);
+    try validateRIFFChunk(f, err_info);
 
     while (true) {
         const chunk_info = try nextChunkInfo(f);
@@ -68,7 +71,7 @@ fn evenSeek(f: std.fs.File, offset: u32) !void {
 // NOTE: each of these functions assumes that the file offset is in the correct
 // place (e.g. 0 for the RIFF chunk, or at the start of a new chunk for nextChunkInfo)
 
-fn validateRIFFChunk(f: std.fs.File) !void {
+fn validateRIFFChunk(f: std.fs.File, err_info: []u8) !void {
     const riff_chunk_size: usize = comptime 12;
     var buf: [riff_chunk_size]u8 = undefined;
     const read = try f.readAll(&buf);
@@ -76,9 +79,11 @@ fn validateRIFFChunk(f: std.fs.File) !void {
         return WavHeaderError.ShortRead;
     }
     if (!std.mem.eql(u8, buf[0..4], "RIFF")) {
+        @memcpy(err_info[0..4], buf[0..4]);
         return WavHeaderError.InvalidRIFFChunkID;
     }
     if (!std.mem.eql(u8, buf[8..12], "WAVE")) {
+        @memcpy(err_info[0..4], buf[8..12]);
         return WavHeaderError.InvalidRIFFChunkFormat;
     }
 }
