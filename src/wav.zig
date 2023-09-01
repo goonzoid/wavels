@@ -51,10 +51,11 @@ pub fn readInfo(path: []const u8, err_info: []u8) !WavInfo {
         const chunk_info = try nextChunkInfo(f);
         switch (chunk_info.id()) {
             ChunkID.fmt => return readFmtChunk(f),
-            ChunkID.bext => try evenSeek(f, chunk_info.size),
-            ChunkID.id3 => try evenSeek(f, chunk_info.size),
-            ChunkID.fake => try evenSeek(f, chunk_info.size),
-            ChunkID.junk => try evenSeek(f, chunk_info.size),
+            ChunkID.bext,
+            ChunkID.id3,
+            ChunkID.fake,
+            ChunkID.junk,
+            => try evenSeek(f, chunk_info.size),
             ChunkID.unknown => {
                 @memcpy(err_info[0..4], &std.mem.toBytes(chunk_info.id_int));
                 return WavHeaderError.InvalidChunkID;
