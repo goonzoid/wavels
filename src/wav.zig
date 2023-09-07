@@ -35,7 +35,15 @@ const ChunkInfo = packed struct(u64) {
 
 // use max_err_info_size to ensure err_info will always have capacity for any error info
 // WARNING: this is likely broken on big endian systems
-pub fn readInfo(path: []const u8, err_info: ?[]u8) !WavInfo {
+pub fn readFile(path: []const u8, err_info: ?[]u8) !WavInfo {
+    const ro_flag = comptime std.fs.File.OpenFlags{ .mode = std.fs.File.OpenMode.read_only };
+    const f = try std.fs.cwd().openFile(path, ro_flag);
+    defer f.close();
+
+    return readInfo(f.reader(), err_info);
+}
+
+pub fn readInfo(reader: anytype, err_info: ?[]u8) !WavInfo {
     // void the err_info so we don't report nonsense if we have an unanticipated error
     if (err_info) |ei| {
         @memcpy(ei, "void");
@@ -43,23 +51,22 @@ pub fn readInfo(path: []const u8, err_info: ?[]u8) !WavInfo {
     // populate ei with a dummy buffer if no err_info was provided
     const ei: []u8 = err_info orelse @constCast(&std.mem.zeroes([max_err_info_size]u8));
 
-    const ro_flag = comptime std.fs.File.OpenFlags{ .mode = std.fs.File.OpenMode.read_only };
-    const f = try std.fs.cwd().openFile(path, ro_flag);
-    defer f.close();
+    var br = std.io.bufferedReader(reader);
+    const r = br.reader();
 
     // the RIFF chunk is a special case since the size is
     // fixed, and not included in the chunk itself
-    try validateRIFFChunk(f, ei);
+    try validateRIFFChunk(r, ei);
 
     while (true) {
-        const chunk_info = try nextChunkInfo(f);
+        const chunk_info = try nextChunkInfo(r);
         switch (chunk_info.id()) {
-            ChunkID.fmt => return readFmtChunk(f),
+            ChunkID.fmt => return readFmtChunk(r),
             ChunkID.bext,
             ChunkID.id3,
             ChunkID.fake,
             ChunkID.junk,
-            => try evenSeek(f, chunk_info.size),
+            => try evenSeek(r, chunk_info.size),
             ChunkID.unknown => {
                 @memcpy(ei[0..4], &std.mem.toBytes(chunk_info.id_int));
                 return WavHeaderError.InvalidChunkID;
@@ -68,18 +75,18 @@ pub fn readInfo(path: []const u8, err_info: ?[]u8) !WavInfo {
     }
 }
 
-fn evenSeek(f: std.fs.File, offset: u32) !void {
-    const o: i64 = if (offset & 1 == 1) offset + 1 else offset;
-    try f.seekBy(o);
+fn evenSeek(r: anytype, offset: u32) !void {
+    const o: u64 = if (offset & 1 == 1) offset + 1 else offset;
+    try r.skipBytes(o, .{ .buf_size = 512 }); // TODO: what is this options struct doing?
 }
 
 // NOTE: each of these functions assumes that the file offset is in the correct
 // place (e.g. 0 for the RIFF chunk, or at the start of a new chunk for nextChunkInfo)
 
-fn validateRIFFChunk(f: std.fs.File, err_info: []u8) !void {
+fn validateRIFFChunk(r: anytype, err_info: []u8) !void {
     const riff_chunk_size: usize = comptime 12;
     var buf: [riff_chunk_size]u8 = undefined;
-    const read = try f.readAll(&buf);
+    const read = try r.read(&buf);
     if (read < riff_chunk_size) {
         return WavHeaderError.ShortRead;
     }
@@ -93,21 +100,21 @@ fn validateRIFFChunk(f: std.fs.File, err_info: []u8) !void {
     }
 }
 
-fn nextChunkInfo(f: std.fs.File) !ChunkInfo {
+fn nextChunkInfo(r: anytype) !ChunkInfo {
     const size = @sizeOf(ChunkInfo);
     var buf: [size]u8 = undefined;
-    var read = try f.readAll(&buf);
+    var read = try r.read(&buf);
     if (read < size) {
         return WavHeaderError.ShortRead;
     }
     return @bitCast(buf);
 }
 
-fn readFmtChunk(f: std.fs.File) !WavInfo {
+fn readFmtChunk(r: anytype) !WavInfo {
     // fmt chunks can be > 16, but this is enough to get the fields we need
     const min_chunk_size: usize = comptime 16;
     var buf: [min_chunk_size]u8 = undefined;
-    const read = try f.readAll(&buf);
+    const read = try r.read(&buf);
     if (read < min_chunk_size) {
         return WavHeaderError.ShortRead;
     }

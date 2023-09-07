@@ -168,7 +168,7 @@ fn showList(
     var any_errors = false;
     for (files) |file| {
         var err_info: [wav.max_err_info_size]u8 = undefined;
-        if (wav.readInfo(file, &err_info)) |info| {
+        if (wav.readFile(file, &err_info)) |info| {
             _ = try stdout.print(
                 "{s}\t{d} khz {d} bit {s}\n",
                 .{
@@ -197,7 +197,7 @@ fn showCounts(
 
     for (files) |file| {
         var err_info: [wav.max_err_info_size]u8 = undefined;
-        const info = wav.readInfo(file, &err_info) catch |err| {
+        const info = wav.readFile(file, &err_info) catch |err| {
             any_errors = true;
             _ = try stderr.print("{s} {}: {s}\n", .{ file, err, err_info });
             continue;
