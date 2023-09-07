@@ -51,7 +51,7 @@ pub fn readInfo(reader: anytype, err_info: ?[]u8) !WavInfo {
     // populate ei with a dummy buffer if no err_info was provided
     const ei: []u8 = err_info orelse @constCast(&std.mem.zeroes([max_err_info_size]u8));
 
-    var br = std.io.bufferedReader(reader);
+    var br = std.io.bufferedReaderSize(256, reader);
     const r = br.reader();
 
     // the RIFF chunk is a special case since the size is
