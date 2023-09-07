@@ -170,10 +170,13 @@ fn showCounts(
     var counters = std.ArrayList(Counter).init(allocator);
 
     for (files) |file| {
-        var err_info: [wav.max_err_info_size]u8 = undefined;
-        const info = wav.readInfo(file, &err_info) catch |err| {
+        // std.debug.print("file: {s}\n", .{file});
+        // UH OH segfault!?!?!?
+        // var err_info: [wav.max_err_info_size]u8 = undefined;
+        const info = wav.readInfo(file, null) catch |err| {
             any_errors = true;
-            _ = try stderr.writer().print("{s} {}: {s}\n", .{ file, err, err_info });
+            _ = try stderr.writer().print("{s} {}: {s}\n", .{ file, err, file });
+            // _ = try stderr.writer().print("{s} {}: {s}\n", .{ file, err, err_info });
             continue;
         };
 

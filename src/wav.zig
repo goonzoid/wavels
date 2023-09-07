@@ -16,7 +16,7 @@ const WavHeaderError = error{
 
 const ChunkID = enum(u32) {
     // these are reversed, because endianness
-    fmt = 0x20746d66, // " tmf"
+    fmt = 0x20746d67, // " tmf"
     bext = 0x74786562, // "txeb"
     id3 = 0x20336469, // " 3di"
     fake = 0x656b6146, // "ekaF"
@@ -35,17 +35,23 @@ const ChunkInfo = packed struct(u64) {
 
 // use max_err_info_size to ensure err_info will always have capacity for any error info
 // WARNING: this is likely broken on big endian systems
-pub fn readInfo(path: []const u8, err_info: []u8) !WavInfo {
+pub fn readInfo(path: []const u8, err_info: ?[]u8) !WavInfo {
+    std.debug.print("readInfo: {s}\n", .{path});
+    // std.debug.print("errInfo: {s}\n", .{err_info orelse "nope"});
+    // void the err_info so we don't report nonsense if we have an unanticipated error
+    if (err_info) |ei| {
+        @memcpy(ei, "void");
+    }
+    var ei = err_info orelse undefined;
+
     const ro_flag = comptime std.fs.File.OpenFlags{ .mode = std.fs.File.OpenMode.read_only };
     const f = try std.fs.cwd().openFile(path, ro_flag);
     defer f.close();
 
-    // void the err_info so we don't report nonsense if we have an unanticipated error
-    @memcpy(err_info, "void");
-
     // the RIFF chunk is a special case since the size is
     // fixed, and not included in the chunk itself
-    try validateRIFFChunk(f, err_info);
+    try validateRIFFChunk(f, ei);
+    std.debug.print("RIFF chunk valid\n", .{});
 
     while (true) {
         const chunk_info = try nextChunkInfo(f);
@@ -57,7 +63,7 @@ pub fn readInfo(path: []const u8, err_info: []u8) !WavInfo {
             ChunkID.junk,
             => try evenSeek(f, chunk_info.size),
             ChunkID.unknown => {
-                @memcpy(err_info[0..4], &std.mem.toBytes(chunk_info.id_int));
+                @memcpy(ei[0..4], &std.mem.toBytes(chunk_info.id_int));
                 return WavHeaderError.InvalidChunkID;
             },
         }
