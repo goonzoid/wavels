@@ -29,13 +29,15 @@ const params = clap.parseParamsComptime(
 );
 
 pub fn main() !void {
-    const stdout = std.io.getStdOut();
-    const stderr = std.io.getStdErr();
+    const stdout_file = std.io.getStdOut().writer();
+    var stdout_bw = std.io.bufferedWriter(stdout_file);
+    const stdout = stdout_bw.writer();
+    const stderr = std.io.getStdErr().writer();
 
     const res = clap.parse(clap.Help, &params, clap.parsers.default, .{}) catch |err|
         switch (err) {
         error.InvalidArgument => {
-            _ = try stderr.writer().print(help_header_fmt, .{version});
+            _ = try stderr.print(help_header_fmt, .{version});
             std.process.exit(1);
         },
         else => return err,
@@ -43,14 +45,14 @@ pub fn main() !void {
     defer res.deinit();
 
     if (res.args.version != 0) {
-        _ = try stdout.writer().print(
+        _ = try stdout.print(
             "wavels {s}\nbuilt with zig {s}",
             .{ version, builtin.zig_version_string },
         );
         std.process.exit(0);
     }
     if (res.args.help != 0) {
-        _ = try stdout.writer().print(help_header_fmt, .{version});
+        _ = try stdout.print(help_header_fmt, .{version});
         std.process.exit(0);
     }
 
@@ -68,10 +70,17 @@ pub fn main() !void {
         else => try showCounts(allocator, files, stdout, stderr),
     };
 
+    try stdout_bw.flush();
+
     if (any_errors) std.process.exit(1);
 }
 
-fn getWavFileFromArgs(allocator: std.mem.Allocator, args: []const []const u8, stderr: std.fs.File, recurse: bool) ![]const []const u8 {
+fn getWavFileFromArgs(
+    allocator: std.mem.Allocator,
+    args: []const []const u8,
+    stderr: anytype,
+    recurse: bool,
+) ![]const []const u8 {
     var list = std.ArrayList([]const u8).init(allocator);
     for (args) |path| {
         if (hasWavExt(path)) {
@@ -79,13 +88,17 @@ fn getWavFileFromArgs(allocator: std.mem.Allocator, args: []const []const u8, st
         } else if (try isDir(path)) {
             try list.appendSlice(try getWavFiles(allocator, path, recurse));
         } else {
-            try stderr.writer().print("{s} - unsupported file type", .{path});
+            try stderr.print("{s} - unsupported file type", .{path});
         }
     }
     return list.items;
 }
 
-fn getWavFiles(allocator: std.mem.Allocator, path: []const u8, recurse: bool) ![]const []const u8 {
+fn getWavFiles(
+    allocator: std.mem.Allocator,
+    path: []const u8,
+    recurse: bool,
+) ![]const []const u8 {
     var dir = try std.fs.cwd().openIterableDir(path, .{});
     defer dir.close();
 
@@ -113,11 +126,19 @@ fn getWavFiles(allocator: std.mem.Allocator, path: []const u8, recurse: bool) ![
     return files.items;
 }
 
-fn dotlessRelPath(allocator: std.mem.Allocator, dir_path: []const u8, filename: []const u8) ![]const u8 {
+fn dotlessRelPath(
+    allocator: std.mem.Allocator,
+    dir_path: []const u8,
+    filename: []const u8,
+) ![]const u8 {
     if (std.mem.eql(u8, dir_path, ".")) {
         return try allocator.dupe(u8, filename);
     }
-    return try std.fmt.allocPrint(allocator, "{s}/{s}", .{ dir_path, filename });
+    return try std.fmt.allocPrint(
+        allocator,
+        "{s}/{s}",
+        .{ dir_path, filename },
+    );
 }
 
 fn isDir(path: []const u8) !bool {
@@ -141,20 +162,25 @@ fn hasWavExt(name: []const u8) bool {
 
 fn showList(
     files: []const []const u8,
-    stdout: std.fs.File,
-    stderr: std.fs.File,
+    stdout: anytype,
+    stderr: anytype,
 ) !bool {
     var any_errors = false;
     for (files) |file| {
         var err_info: [wav.max_err_info_size]u8 = undefined;
         if (wav.readInfo(file, &err_info)) |info| {
-            _ = try stdout.writer().print(
+            _ = try stdout.print(
                 "{s}\t{d} khz {d} bit {s}\n",
-                .{ file, info.sample_rate, info.bit_depth, try channelCount(info.channels) },
+                .{
+                    file,
+                    info.sample_rate,
+                    info.bit_depth,
+                    try channelCount(info.channels),
+                },
             );
         } else |err| {
             any_errors = true;
-            _ = try stderr.writer().print("{s} {}: {s}\n", .{ file, err, err_info });
+            _ = try stderr.print("{s} {}: {s}\n", .{ file, err, err_info });
         }
     }
     return any_errors;
@@ -163,8 +189,8 @@ fn showList(
 fn showCounts(
     allocator: std.mem.Allocator,
     files: []const []const u8,
-    stdout: std.fs.File,
-    stderr: std.fs.File,
+    stdout: anytype,
+    stderr: anytype,
 ) !bool {
     var any_errors = false;
     var counters = std.ArrayList(Counter).init(allocator);
@@ -173,7 +199,7 @@ fn showCounts(
         var err_info: [wav.max_err_info_size]u8 = undefined;
         const info = wav.readInfo(file, &err_info) catch |err| {
             any_errors = true;
-            _ = try stderr.writer().print("{s} {}: {s}\n", .{ file, err, err_info });
+            _ = try stderr.print("{s} {}: {s}\n", .{ file, err, err_info });
             continue;
         };
 
@@ -192,9 +218,14 @@ fn showCounts(
     }
 
     for (counters.items) |counter| {
-        _ = try stdout.writer().print(
+        _ = try stdout.print(
             "{d}\t{d} khz {d} bit {s}\n",
-            .{ counter.count, counter.sample_rate, counter.bit_depth, try channelCount(counter.channels) },
+            .{
+                counter.count,
+                counter.sample_rate,
+                counter.bit_depth,
+                try channelCount(counter.channels),
+            },
         );
     }
     return any_errors;
