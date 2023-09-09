@@ -63,7 +63,7 @@ pub fn main() !void {
     const recurse = res.args.recurse != 0;
     const files = switch (res.positionals.len) {
         0 => try getWavFiles(allocator, ".", recurse),
-        else => try getWavFileFromArgs(allocator, res.positionals, stderr, recurse),
+        else => try getWavFilesFromArgs(allocator, res.positionals, stderr, recurse),
     };
     const any_errors = switch (res.args.count) {
         0 => try showList(files, stdout, stderr),
@@ -75,7 +75,7 @@ pub fn main() !void {
     if (any_errors) std.process.exit(1);
 }
 
-fn getWavFileFromArgs(
+fn getWavFilesFromArgs(
     allocator: std.mem.Allocator,
     args: []const []const u8,
     stderr: anytype,
