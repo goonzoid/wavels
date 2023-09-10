@@ -180,21 +180,22 @@ fn showList(
     var any_errors = false;
     for (files.paths) |file| {
         var err_info: [wav.max_err_info_size]u8 = undefined;
-        if (wav.readInfo(file, &err_info)) |info| {
-            _ = try stdout.print(
-                "{s}{s} {d} khz {d} bit {s}\n",
-                .{
-                    file,
-                    try padding(allocator, file, files.max_length),
-                    info.sample_rate,
-                    info.bit_depth,
-                    try channelCount(info.channels),
-                },
-            );
-        } else |err| {
+        const info = wav.readInfo(file, &err_info) catch |err| {
             any_errors = true;
             _ = try stderr.print("{s} {}: {s}\n", .{ file, err, err_info });
-        }
+            continue;
+        };
+
+        _ = try stdout.print(
+            "{s}{s} {d} khz {d} bit {s}\n",
+            .{
+                file,
+                try padding(allocator, file, files.max_length),
+                info.sample_rate,
+                info.bit_depth,
+                try channelCount(info.channels),
+            },
+        );
     }
     return any_errors;
 }
