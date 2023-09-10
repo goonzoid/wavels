@@ -1,7 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const clap = @import("clap");
-
 const wav = @import("./wav.zig");
 
 const version = "0.1.0";
@@ -66,7 +65,7 @@ pub fn main() !void {
         else => try getWavFilesFromArgs(allocator, res.positionals, stderr, recurse),
     };
     const any_errors = switch (res.args.count) {
-        0 => try showList(files, stdout, stderr),
+        0 => try showList(allocator, files, stdout, stderr),
         else => try showCounts(allocator, files, stdout, stderr),
     };
 
@@ -75,58 +74,70 @@ pub fn main() !void {
     if (any_errors) std.process.exit(1);
 }
 
+const FileList = struct {
+    paths: []const []const u8,
+    max_length: u16,
+};
+
 fn getWavFilesFromArgs(
     allocator: std.mem.Allocator,
     args: []const []const u8,
     stderr: anytype,
     recurse: bool,
-) ![]const []const u8 {
-    var list = std.ArrayList([]const u8).init(allocator);
+) !FileList {
+    var files = std.ArrayList([]const u8).init(allocator);
+    var max_length: u16 = 0;
     for (args) |path| {
         if (hasWavExt(path)) {
-            try list.append(path);
+            max_length = @max(max_length, @as(u16, @intCast(path.len)));
+            try files.append(path);
         } else if (try isDir(path)) {
-            try list.appendSlice(try getWavFiles(allocator, path, recurse));
+            const more_files = try getWavFiles(allocator, path, recurse);
+            max_length = @max(max_length, @as(u16, @intCast(more_files.max_length)));
+            try files.appendSlice(more_files.paths);
         } else {
             try stderr.print("{s} - unsupported file type", .{path});
         }
     }
-    return list.items;
+    return .{ .paths = files.items, .max_length = max_length };
 }
 
 fn getWavFiles(
     allocator: std.mem.Allocator,
-    path: []const u8,
+    dir_path: []const u8,
     recurse: bool,
-) ![]const []const u8 {
-    var dir = try std.fs.cwd().openIterableDir(path, .{});
+) !FileList {
+    var dir = try std.fs.cwd().openIterableDir(dir_path, .{});
     defer dir.close();
 
     var files = std.ArrayList([]const u8).init(allocator);
+    var max_length: u16 = 0;
 
     if (recurse) {
         var walker = try dir.walk(allocator);
         defer walker.deinit();
         while (try walker.next()) |we| {
             if (hasWavExt(we.basename)) {
-                const rel_path = try dotlessRelPath(allocator, path, we.path);
-                try files.append(rel_path);
+                const path = try dotlessPath(allocator, dir_path, we.path);
+                max_length = @max(max_length, @as(u16, @intCast(path.len)));
+                try files.append(path);
             }
         }
     } else {
         var it = dir.iterate();
         while (try it.next()) |f| {
             if (hasWavExt(f.name)) {
-                const rel_path = try dotlessRelPath(allocator, path, f.name);
-                try files.append(rel_path);
+                const path = try dotlessPath(allocator, dir_path, f.name);
+                max_length = @max(max_length, @as(u16, @intCast(path.len)));
+                try files.append(path);
             }
         }
     }
 
-    return files.items;
+    return .{ .paths = files.items, .max_length = max_length };
 }
 
-fn dotlessRelPath(
+fn dotlessPath(
     allocator: std.mem.Allocator,
     dir_path: []const u8,
     filename: []const u8,
@@ -161,18 +172,20 @@ fn hasWavExt(name: []const u8) bool {
 }
 
 fn showList(
-    files: []const []const u8,
+    allocator: std.mem.Allocator,
+    files: FileList,
     stdout: anytype,
     stderr: anytype,
 ) !bool {
     var any_errors = false;
-    for (files) |file| {
+    for (files.paths) |file| {
         var err_info: [wav.max_err_info_size]u8 = undefined;
         if (wav.readInfo(file, &err_info)) |info| {
             _ = try stdout.print(
-                "{s}\t{d} khz {d} bit {s}\n",
+                "{s}{s} {d} khz {d} bit {s}\n",
                 .{
                     file,
+                    try padding(allocator, file, files.max_length),
                     info.sample_rate,
                     info.bit_depth,
                     try channelCount(info.channels),
@@ -186,16 +199,22 @@ fn showList(
     return any_errors;
 }
 
+fn padding(allocator: std.mem.Allocator, s: []const u8, total_length: u16) ![]const u8 {
+    const ret = try allocator.alloc(u8, total_length - s.len);
+    @memset(ret, 32);
+    return ret;
+}
+
 fn showCounts(
     allocator: std.mem.Allocator,
-    files: []const []const u8,
+    files: FileList,
     stdout: anytype,
     stderr: anytype,
 ) !bool {
     var any_errors = false;
     var counters = std.ArrayList(Counter).init(allocator);
 
-    for (files) |file| {
+    for (files.paths) |file| {
         var err_info: [wav.max_err_info_size]u8 = undefined;
         const info = wav.readInfo(file, &err_info) catch |err| {
             any_errors = true;
