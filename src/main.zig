@@ -48,10 +48,12 @@ pub fn main() !void {
             "wavels {s}\nbuilt with zig {s}",
             .{ version, builtin.zig_version_string },
         );
+        try stdout_bw.flush();
         std.process.exit(0);
     }
     if (res.args.help != 0) {
         _ = try stdout.print(help_header_fmt, .{version});
+        try stdout_bw.flush();
         std.process.exit(0);
     }
 
