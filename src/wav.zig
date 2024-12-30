@@ -96,7 +96,7 @@ fn validateRIFFChunk(f: std.fs.File, err_info: []u8) !void {
 fn nextChunkInfo(f: std.fs.File) !ChunkInfo {
     const size = @sizeOf(ChunkInfo);
     var buf: [size]u8 = undefined;
-    var read = try f.readAll(&buf);
+    const read = try f.readAll(&buf);
     if (read < size) {
         return WavHeaderError.ShortRead;
     }

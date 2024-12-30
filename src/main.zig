@@ -33,7 +33,11 @@ pub fn main() !void {
     const stdout = stdout_bw.writer();
     const stderr = std.io.getStdErr().writer();
 
-    const res = clap.parse(clap.Help, &params, clap.parsers.default, .{}) catch |err|
+    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
+    defer arena.deinit();
+    const allocator = arena.allocator();
+
+    const res = clap.parse(clap.Help, &params, clap.parsers.default, .{ .allocator = allocator }) catch |err|
         switch (err) {
         error.InvalidArgument => {
             _ = try stderr.print(help_header_fmt, .{version});
@@ -56,10 +60,6 @@ pub fn main() !void {
         try stdout_bw.flush();
         std.process.exit(0);
     }
-
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
 
     const recurse = res.args.recurse != 0;
     const files = switch (res.positionals.len) {
@@ -109,7 +109,7 @@ fn getWavFiles(
     dir_path: []const u8,
     recurse: bool,
 ) !FileList {
-    var dir = try std.fs.cwd().openIterableDir(dir_path, .{});
+    var dir = try std.fs.cwd().openDir(dir_path, .{});
     defer dir.close();
 
     var files = std.ArrayList([]const u8).init(allocator);
@@ -234,7 +234,7 @@ fn showCounts(
             }
         }
         if (!counted) {
-            var counter = Counter.init(info);
+            const counter = Counter.init(info);
             try counters.append(counter);
         }
     }
