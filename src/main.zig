@@ -121,8 +121,8 @@ fn getWavFiles(
         while (try walker.next()) |we| {
             if (hasWavExt(we.basename)) {
                 const path = try dotlessPath(allocator, dir_path, we.path);
-                max_length = @max(max_length, @as(u16, @intCast(path.len)));
                 try files.append(path);
+                max_length = @max(max_length, @as(u16, @intCast(path.len)));
             }
         }
     } else {
@@ -130,8 +130,8 @@ fn getWavFiles(
         while (try it.next()) |f| {
             if (hasWavExt(f.name)) {
                 const path = try dotlessPath(allocator, dir_path, f.name);
-                max_length = @max(max_length, @as(u16, @intCast(path.len)));
                 try files.append(path);
+                max_length = @max(max_length, @as(u16, @intCast(path.len)));
             }
         }
     }
