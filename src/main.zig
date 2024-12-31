@@ -27,6 +27,8 @@ const params = clap.parseParamsComptime(
     \\<str>...
 );
 
+const unreadable_or_unsupported = "unreadable or unsupported";
+
 pub fn main() !void {
     const stdout_file = std.io.getStdOut().writer();
     var stdout_bw = std.io.bufferedWriter(stdout_file);
@@ -185,19 +187,21 @@ fn showList(
         const info = wav.readInfo(file, &err_info) catch |err| {
             any_errors = true;
             _ = try stderr.print("{s} {}: {s}\n", .{ file, err, err_info });
+            _ = try stdout.print("{s}{s} {s}\n", .{
+                file,
+                try padding(allocator, file, files.max_length),
+                unreadable_or_unsupported,
+            });
             continue;
         };
 
-        _ = try stdout.print(
-            "{s}{s} {d} khz {d} bit {s}\n",
-            .{
-                file,
-                try padding(allocator, file, files.max_length),
-                info.sample_rate,
-                info.bit_depth,
-                try channelCount(info.channels),
-            },
-        );
+        _ = try stdout.print("{s}{s} {d} khz {d} bit {s}\n", .{
+            file,
+            try padding(allocator, file, files.max_length),
+            info.sample_rate,
+            info.bit_depth,
+            try channelCount(info.channels),
+        });
     }
     return any_errors;
 }
@@ -214,13 +218,13 @@ fn showCounts(
     stdout: anytype,
     stderr: anytype,
 ) !bool {
-    var any_errors = false;
     var counters = std.ArrayList(Counter).init(allocator);
+    var err_counter = Counter.initNull();
 
     for (files.paths) |file| {
         var err_info: [wav.max_err_info_size]u8 = undefined;
         const info = wav.readInfo(file, &err_info) catch |err| {
-            any_errors = true;
+            err_counter.count += 1;
             _ = try stderr.print("{s} {}: {s}\n", .{ file, err, err_info });
             continue;
         };
@@ -240,17 +244,21 @@ fn showCounts(
     }
 
     for (counters.items) |counter| {
-        _ = try stdout.print(
-            "{d}\t{d} khz {d} bit {s}\n",
-            .{
-                counter.count,
-                counter.sample_rate,
-                counter.bit_depth,
-                try channelCount(counter.channels),
-            },
-        );
+        _ = try stdout.print("{d}\t{d} khz {d} bit {s}\n", .{
+            counter.count,
+            counter.sample_rate,
+            counter.bit_depth,
+            try channelCount(counter.channels),
+        });
     }
-    return any_errors;
+    if (err_counter.count > 0) {
+        _ = try stdout.print("{d}\t{s}\n", .{
+            err_counter.count,
+            unreadable_or_unsupported,
+        });
+        return true;
+    }
+    return false;
 }
 
 const Counter = struct {
@@ -265,6 +273,15 @@ const Counter = struct {
             .sample_rate = info.sample_rate,
             .bit_depth = info.bit_depth,
             .channels = info.channels,
+        };
+    }
+
+    fn initNull() @This() {
+        return .{
+            .count = 0,
+            .sample_rate = 0,
+            .bit_depth = 0,
+            .channels = 0,
         };
     }
 
