@@ -13,6 +13,7 @@ const help_header_fmt =
     \\FLAGS:
     \\    -c, --count           show counts, grouped by sample rate, bit depth, and channel count
     \\    -r, --recurse         recursively list subdirectories
+    \\    -d, --debug           print debug info to stderr
     \\    -h, --help            show this help info
     \\    -v, --version         show version info
     \\
@@ -22,6 +23,7 @@ const help_header_fmt =
 const params = clap.parseParamsComptime(
     \\-c, --count
     \\-r, --recurse
+    \\-d, --debug
     \\-h, --help
     \\-v, --version
     \\<str>...
@@ -63,14 +65,16 @@ pub fn main() !void {
         std.process.exit(0);
     }
 
+    const err_writer = if (res.args.debug != 0) stderr.any() else std.io.null_writer.any();
+
     const recurse = res.args.recurse != 0;
     const files = switch (res.positionals.len) {
         0 => try getWavFiles(allocator, ".", recurse),
-        else => try getWavFilesFromArgs(allocator, res.positionals, stderr, recurse),
+        else => try getWavFilesFromArgs(allocator, res.positionals, err_writer, recurse),
     };
     const any_errors = switch (res.args.count) {
-        0 => try showList(allocator, files, stdout, stderr),
-        else => try showCounts(allocator, files, stdout, stderr),
+        0 => try showList(allocator, files, stdout, err_writer),
+        else => try showCounts(allocator, files, stdout, err_writer),
     };
 
     try stdout_bw.flush();
@@ -86,7 +90,7 @@ const FileList = struct {
 fn getWavFilesFromArgs(
     allocator: std.mem.Allocator,
     args: []const []const u8,
-    stderr: anytype,
+    err_writer: std.io.AnyWriter,
     recurse: bool,
 ) !FileList {
     var files = std.ArrayList([]const u8).init(allocator);
@@ -100,7 +104,7 @@ fn getWavFilesFromArgs(
             max_length = @max(max_length, @as(u16, @intCast(more_files.max_length)));
             try files.appendSlice(more_files.paths);
         } else {
-            try stderr.print("{s} - unsupported file type", .{path});
+            try err_writer.print("{s} - unsupported file type", .{path});
         }
     }
     return .{ .paths = files.items, .max_length = max_length };
@@ -179,14 +183,14 @@ fn showList(
     allocator: std.mem.Allocator,
     files: FileList,
     stdout: anytype,
-    stderr: anytype,
+    err_writer: std.io.AnyWriter,
 ) !bool {
     var any_errors = false;
     for (files.paths) |file| {
         var err_info: [wav.max_err_info_size]u8 = undefined;
         const info = wav.readInfo(file, &err_info) catch |err| {
             any_errors = true;
-            _ = try stderr.print("{s} {}: {s}\n", .{ file, err, err_info });
+            _ = try err_writer.print("{s} {}: {s}\n", .{ file, err, err_info });
             _ = try stdout.print("{s}{s}{s}\n", .{
                 file,
                 try padding(allocator, file, files.max_length),
@@ -216,7 +220,7 @@ fn showCounts(
     allocator: std.mem.Allocator,
     files: FileList,
     stdout: anytype,
-    stderr: anytype,
+    err_writer: std.io.AnyWriter,
 ) !bool {
     var counters = std.ArrayList(Counter).init(allocator);
     var err_counter = Counter.initNull();
@@ -225,7 +229,7 @@ fn showCounts(
         var err_info: [wav.max_err_info_size]u8 = undefined;
         const info = wav.readInfo(file, &err_info) catch |err| {
             err_counter.count += 1;
-            _ = try stderr.print("{s} {}: {s}\n", .{ file, err, err_info });
+            _ = try err_writer.print("{s} {}: {s}\n", .{ file, err, err_info });
             continue;
         };
 
