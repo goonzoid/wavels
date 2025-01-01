@@ -187,7 +187,7 @@ fn showList(
         const info = wav.readInfo(file, &err_info) catch |err| {
             any_errors = true;
             _ = try stderr.print("{s} {}: {s}\n", .{ file, err, err_info });
-            _ = try stdout.print("{s}{s} {s}\n", .{
+            _ = try stdout.print("{s}{s}{s}\n", .{
                 file,
                 try padding(allocator, file, files.max_length),
                 unreadable_or_unsupported,
@@ -195,7 +195,7 @@ fn showList(
             continue;
         };
 
-        _ = try stdout.print("{s}{s} {d} khz {d} bit {s}\n", .{
+        _ = try stdout.print("{s}{s}{d} khz {d} bit {s}\n", .{
             file,
             try padding(allocator, file, files.max_length),
             info.sample_rate,
@@ -207,7 +207,7 @@ fn showList(
 }
 
 fn padding(allocator: std.mem.Allocator, s: []const u8, total_length: u16) ![]const u8 {
-    const ret = try allocator.alloc(u8, total_length - s.len);
+    const ret = try allocator.alloc(u8, total_length - s.len + 1);
     @memset(ret, 32);
     return ret;
 }
