@@ -1,13 +1,13 @@
 const std = @import("std");
 
-pub const WavInfo = struct {
+pub const PCMInfo = struct {
     sample_rate: u32,
     bit_depth: u16,
     channels: u16,
 };
 
 pub const max_err_info_size = 4;
-const WavHeaderError = error{
+const PCMReadError = error{
     ShortRead,
     InvalidRIFFChunkID,
     InvalidRIFFChunkFormat,
@@ -35,7 +35,7 @@ const ChunkInfo = packed struct(u64) {
 
 // use max_err_info_size to ensure err_info will always have capacity for any error info
 // WARNING: this is likely broken on big endian systems
-pub fn readInfo(path: []const u8, err_info: ?[]u8) !WavInfo {
+pub fn readInfo(path: []const u8, err_info: ?[]u8) !PCMInfo {
     // void the err_info so we don't report nonsense if we have an unanticipated error
     if (err_info) |ei| {
         @memcpy(ei, "void");
@@ -62,7 +62,7 @@ pub fn readInfo(path: []const u8, err_info: ?[]u8) !WavInfo {
             => try evenSeek(f, chunk_info.size),
             ChunkID.unknown => {
                 @memcpy(ei[0..4], &std.mem.toBytes(chunk_info.id_int));
-                return WavHeaderError.InvalidChunkID;
+                return PCMReadError.InvalidChunkID;
             },
         }
     }
@@ -81,15 +81,15 @@ fn validateRIFFChunk(f: std.fs.File, err_info: []u8) !void {
     var buf: [riff_chunk_size]u8 = undefined;
     const read = try f.readAll(&buf);
     if (read < riff_chunk_size) {
-        return WavHeaderError.ShortRead;
+        return PCMReadError.ShortRead;
     }
     if (!std.mem.eql(u8, buf[0..4], "RIFF")) {
         @memcpy(err_info[0..4], buf[0..4]);
-        return WavHeaderError.InvalidRIFFChunkID;
+        return PCMReadError.InvalidRIFFChunkID;
     }
     if (!std.mem.eql(u8, buf[8..12], "WAVE")) {
         @memcpy(err_info[0..4], buf[8..12]);
-        return WavHeaderError.InvalidRIFFChunkFormat;
+        return PCMReadError.InvalidRIFFChunkFormat;
     }
 }
 
@@ -98,18 +98,18 @@ fn nextChunkInfo(f: std.fs.File) !ChunkInfo {
     var buf: [size]u8 = undefined;
     const read = try f.readAll(&buf);
     if (read < size) {
-        return WavHeaderError.ShortRead;
+        return PCMReadError.ShortRead;
     }
     return @bitCast(buf);
 }
 
-fn readFmtChunk(f: std.fs.File) !WavInfo {
+fn readFmtChunk(f: std.fs.File) !PCMInfo {
     // fmt chunks can be > 16, but this is enough to get the fields we need
     const min_chunk_size: usize = comptime 16;
     var buf: [min_chunk_size]u8 = undefined;
     const read = try f.readAll(&buf);
     if (read < min_chunk_size) {
-        return WavHeaderError.ShortRead;
+        return PCMReadError.ShortRead;
     }
     return .{
         .channels = std.mem.bytesToValue(u16, buf[2..4]),

@@ -1,7 +1,7 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const clap = @import("clap");
-const wav = @import("./wav.zig");
+const pcm = @import("./pcm.zig");
 
 const version = "0.1.0";
 const help_header_fmt =
@@ -187,8 +187,8 @@ fn showList(
 ) !bool {
     var any_errors = false;
     for (files.paths) |file| {
-        var err_info: [wav.max_err_info_size]u8 = undefined;
-        const info = wav.readInfo(file, &err_info) catch |err| {
+        var err_info: [pcm.max_err_info_size]u8 = undefined;
+        const info = pcm.readInfo(file, &err_info) catch |err| {
             any_errors = true;
             _ = try err_writer.print("{s} {}: {s}\n", .{ file, err, err_info });
             _ = try stdout.print("{s}{s}{s}\n", .{
@@ -226,8 +226,8 @@ fn showCounts(
     var err_counter = Counter.initNull();
 
     for (files.paths) |file| {
-        var err_info: [wav.max_err_info_size]u8 = undefined;
-        const info = wav.readInfo(file, &err_info) catch |err| {
+        var err_info: [pcm.max_err_info_size]u8 = undefined;
+        const info = pcm.readInfo(file, &err_info) catch |err| {
             err_counter.count += 1;
             _ = try err_writer.print("{s} {}: {s}\n", .{ file, err, err_info });
             continue;
@@ -271,7 +271,7 @@ const Counter = struct {
     bit_depth: u16,
     channels: u16,
 
-    fn init(info: wav.WavInfo) @This() {
+    fn init(info: pcm.PCMInfo) @This() {
         return .{
             .count = 1,
             .sample_rate = info.sample_rate,
@@ -289,7 +289,7 @@ const Counter = struct {
         };
     }
 
-    fn matches(self: @This(), other: wav.WavInfo) bool {
+    fn matches(self: @This(), other: pcm.PCMInfo) bool {
         return self.sample_rate == other.sample_rate and
             self.bit_depth == other.bit_depth and
             self.channels == other.channels;
