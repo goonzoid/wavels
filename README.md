@@ -8,7 +8,7 @@ ls, but for waves 🌊
 wavels 0.1.0
 
 USAGE:
-    wavels [flags] [wav_file|directory ...]
+    wavels [flags] [wav_or_aiff_file|directory ...]
 
 FLAGS:
     -c, --count           show counts, grouped by sample rate, bit depth, and channel count

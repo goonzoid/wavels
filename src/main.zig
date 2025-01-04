@@ -8,7 +8,7 @@ const help_header_fmt =
     \\wavels {s}
     \\
     \\USAGE:
-    \\    wavels [flags] [wav_file|directory ...]
+    \\    wavels [flags] [wav_or_aiff_file|directory ...]
     \\
     \\FLAGS:
     \\    -c, --count           show counts, grouped by sample rate, bit depth, and channel count
@@ -96,7 +96,7 @@ fn getWavFilesFromArgs(
     var files = std.ArrayList([]const u8).init(allocator);
     var max_length: u16 = 0;
     for (args) |path| {
-        if (hasWavExt(path)) {
+        if (hasSupportedExtension(path)) {
             max_length = @max(max_length, @as(u16, @intCast(path.len)));
             try files.append(path);
         } else if (try isDir(path)) {
@@ -125,7 +125,7 @@ fn getWavFiles(
         var walker = try dir.walk(allocator);
         defer walker.deinit();
         while (try walker.next()) |we| {
-            if (hasWavExt(we.basename)) {
+            if (hasSupportedExtension(we.basename)) {
                 const path = try dotlessPath(allocator, dir_path, we.path);
                 try files.append(path);
                 max_length = @max(max_length, @as(u16, @intCast(path.len)));
@@ -134,7 +134,7 @@ fn getWavFiles(
     } else {
         var it = dir.iterate();
         while (try it.next()) |f| {
-            if (hasWavExt(f.name)) {
+            if (hasSupportedExtension(f.name)) {
                 const path = try dotlessPath(allocator, dir_path, f.name);
                 try files.append(path);
                 max_length = @max(max_length, @as(u16, @intCast(path.len)));
@@ -167,13 +167,22 @@ fn isDir(path: []const u8) !bool {
     return stat.kind == std.fs.File.Kind.directory;
 }
 
-const wavExtensions = [_][]const u8{ "wav", "WAV", "wave", "WAVE" };
+const extensions = [_][]const u8{
+    "aif",
+    "AIF",
+    "aiff",
+    "AIFF",
+    "wav",
+    "WAV",
+    "wave",
+    "WAVE",
+};
 
-fn hasWavExt(name: []const u8) bool {
+fn hasSupportedExtension(name: []const u8) bool {
     if (std.mem.lastIndexOf(u8, name, ".")) |i| {
         const ext = name[i + 1 .. name.len];
-        for (wavExtensions) |w| {
-            if (std.mem.eql(u8, ext, w)) return true;
+        for (extensions) |e| {
+            if (std.mem.eql(u8, ext, e)) return true;
         }
     }
     return false;
