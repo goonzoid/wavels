@@ -1,8 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const native_endian = builtin.cpu.arch.endian();
-
 pub const PCMInfo = struct {
     sample_rate: u32,
     bit_depth: u16,
@@ -17,13 +15,34 @@ const PCMReadError = error{
     InvalidRIFFChunkFormat,
 };
 
+// use max_err_info_size to ensure err_info will always have capacity for any error info
+pub fn readInfo(path: []const u8, err_info: ?[]u8) !PCMInfo {
+    // void the err_info so we don't report nonsense if we have an unanticipated error
+    if (err_info) |ei| @memcpy(ei, "void");
+    // populate ei with a dummy buffer if no err_info was provided
+    const ei: []u8 = err_info orelse @constCast(&std.mem.zeroes([max_err_info_size]u8));
+
+    const ro_flag = comptime std.fs.File.OpenFlags{ .mode = std.fs.File.OpenMode.read_only };
+    const f = try std.fs.cwd().openFile(path, ro_flag);
+    defer f.close();
+
+    switch (try getFormat(f, ei)) {
+        Format.wav => return readWavHeader(f, ei),
+        Format.aiff => return readAiffHeader(f, ei),
+    }
+}
+
+const native_endian = builtin.cpu.arch.endian();
+
 const Format = enum {
     wav,
     aiff,
 };
 
 const ChunkID = enum(u32) {
-    // these are reversed, because endianness
+    // TODO: these are reversed, because endianness
+    // we should probably do a comptime check
+    // specify versions for both big and little
     fmt = 0x20746d66, // " tmf"
     bext = 0x74786562, // "txeb"
     id3 = 0x20336469, // " 3di"
@@ -47,26 +66,6 @@ const ChunkInfo = struct {
         return std.meta.intToEnum(ChunkID, self.id_int) catch ChunkID.unknown;
     }
 };
-
-// use max_err_info_size to ensure err_info will always have capacity for any error info
-// TODO: this is likely broken on big endian systems
-pub fn readInfo(path: []const u8, err_info: ?[]u8) !PCMInfo {
-    // void the err_info so we don't report nonsense if we have an unanticipated error
-    if (err_info) |ei| {
-        @memcpy(ei, "void");
-    }
-    // populate ei with a dummy buffer if no err_info was provided
-    const ei: []u8 = err_info orelse @constCast(&std.mem.zeroes([max_err_info_size]u8));
-
-    const ro_flag = comptime std.fs.File.OpenFlags{ .mode = std.fs.File.OpenMode.read_only };
-    const f = try std.fs.cwd().openFile(path, ro_flag);
-    defer f.close();
-
-    switch (try getFormat(f, ei)) {
-        Format.wav => return readWavHeader(f, ei),
-        Format.aiff => return readAiffHeader(f, ei),
-    }
-}
 
 // TODO: the calls to nextChunkInfo in readWavHeader and readAiffHeader may
 // have the wrong reverse_size_field parameter on big endian systems... still
@@ -171,16 +170,18 @@ fn nextChunkInfo(f: std.fs.File, reverse_size_field: bool) !ChunkInfo {
     };
 }
 
-// TODO: the buffer sizes below should work in most cases, but may
-// break for some data. We should respect the chunk's size field.
-
-// TODO: confirm that readAll is only reading exactly what we need
+// in readFmtChunk and readCOMMChunk, predicting the chunk size at comptime,
+// rather than reading the size from the chunk prefix itself, allows us to avoid
+// use of an allocator, which makes our public API super simple.
+// for uncompressed audio, the chunks are unlikely to be anything other than
+// 16/18 bytes for wav/fmt and aiff/COMM respectively. if they are larger,
+// nothing we care about at the moment will need those additional bytes.
 
 fn readFmtChunk(f: std.fs.File) !PCMInfo {
-    const min_chunk_size: usize = comptime 16;
-    var buf: [min_chunk_size]u8 = undefined;
+    const chunk_size: usize = comptime 16;
+    var buf: [chunk_size]u8 = undefined;
     const read = try f.readAll(&buf);
-    if (read < min_chunk_size) {
+    if (read < chunk_size) {
         return PCMReadError.ShortRead;
     }
     return .{
@@ -191,10 +192,10 @@ fn readFmtChunk(f: std.fs.File) !PCMInfo {
 }
 
 fn readCOMMChunk(f: std.fs.File) !PCMInfo {
-    const min_chunk_size: usize = comptime 18;
-    var buf: [min_chunk_size]u8 = undefined;
+    const chunk_size: usize = comptime 18;
+    var buf: [chunk_size]u8 = undefined;
     const read = try f.readAll(&buf);
-    if (read < min_chunk_size) {
+    if (read < chunk_size) {
         return PCMReadError.ShortRead;
     }
 
