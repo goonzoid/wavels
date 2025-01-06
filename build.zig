@@ -62,6 +62,8 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    // TODO: this is a bit of a shame, can we do better?
+    unit_tests.root_module.addImport("clap", clap.module("clap"));
 
     const run_unit_tests = b.addRunArtifact(unit_tests);
 

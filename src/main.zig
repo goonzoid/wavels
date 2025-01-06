@@ -1,7 +1,13 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const clap = @import("clap");
+
+const file_list = @import("./file_list.zig");
 const pcm = @import("./pcm.zig");
+
+test {
+    std.testing.refAllDecls(@This());
+}
 
 const version = "0.1.0";
 const help_header_fmt =
@@ -28,6 +34,17 @@ const params = clap.parseParamsComptime(
     \\-v, --version
     \\<str>...
 );
+
+const extensions = [_][]const u8{
+    "aif",
+    "AIF",
+    "aiff",
+    "AIFF",
+    "wav",
+    "WAV",
+    "wave",
+    "WAVE",
+};
 
 const unreadable_or_unsupported = "unreadable or unsupported";
 
@@ -68,10 +85,23 @@ pub fn main() !void {
     const err_writer = if (res.args.debug != 0) stderr.any() else std.io.null_writer.any();
 
     const recurse = res.args.recurse != 0;
+
     const files = switch (res.positionals.len) {
-        0 => try getWavFiles(allocator, ".", recurse),
-        else => try getWavFilesFromArgs(allocator, res.positionals, err_writer, recurse),
+        0 => try file_list.build(
+            allocator,
+            ".",
+            &extensions,
+            recurse,
+        ),
+        else => try file_list.buildFromArgs(
+            allocator,
+            res.positionals,
+            &extensions,
+            recurse,
+            err_writer, // TODO: this should probably NOT respect the debug flag
+        ),
     };
+
     const any_errors = switch (res.args.count) {
         0 => try showList(allocator, files, stdout, err_writer),
         else => try showCounts(allocator, files, stdout, err_writer),
@@ -82,115 +112,9 @@ pub fn main() !void {
     if (any_errors) std.process.exit(1);
 }
 
-const FileList = struct {
-    paths: []const []const u8,
-    max_length: u16,
-};
-
-fn getWavFilesFromArgs(
-    allocator: std.mem.Allocator,
-    args: []const []const u8,
-    err_writer: std.io.AnyWriter,
-    recurse: bool,
-) !FileList {
-    var files = std.ArrayList([]const u8).init(allocator);
-    var max_length: u16 = 0;
-    for (args) |path| {
-        if (hasSupportedExtension(path)) {
-            max_length = @max(max_length, @as(u16, @intCast(path.len)));
-            try files.append(path);
-        } else if (try isDir(path)) {
-            const more_files = try getWavFiles(allocator, path, recurse);
-            max_length = @max(max_length, @as(u16, @intCast(more_files.max_length)));
-            try files.appendSlice(more_files.paths);
-        } else {
-            try err_writer.print("{s} - unsupported file type", .{path});
-        }
-    }
-    return .{ .paths = files.items, .max_length = max_length };
-}
-
-fn getWavFiles(
-    allocator: std.mem.Allocator,
-    dir_path: []const u8,
-    recurse: bool,
-) !FileList {
-    var dir = try std.fs.cwd().openDir(dir_path, .{});
-    defer dir.close();
-
-    var files = std.ArrayList([]const u8).init(allocator);
-    var max_length: u16 = 0;
-
-    if (recurse) {
-        var walker = try dir.walk(allocator);
-        defer walker.deinit();
-        while (try walker.next()) |we| {
-            if (hasSupportedExtension(we.basename)) {
-                const path = try dotlessPath(allocator, dir_path, we.path);
-                try files.append(path);
-                max_length = @max(max_length, @as(u16, @intCast(path.len)));
-            }
-        }
-    } else {
-        var it = dir.iterate();
-        while (try it.next()) |f| {
-            if (hasSupportedExtension(f.name)) {
-                const path = try dotlessPath(allocator, dir_path, f.name);
-                try files.append(path);
-                max_length = @max(max_length, @as(u16, @intCast(path.len)));
-            }
-        }
-    }
-
-    return .{ .paths = files.items, .max_length = max_length };
-}
-
-fn dotlessPath(
-    allocator: std.mem.Allocator,
-    dir_path: []const u8,
-    filename: []const u8,
-) ![]const u8 {
-    if (std.mem.eql(u8, dir_path, ".")) {
-        return try allocator.dupe(u8, filename);
-    }
-    return try std.fmt.allocPrint(
-        allocator,
-        "{s}/{s}",
-        .{ dir_path, filename },
-    );
-}
-
-fn isDir(path: []const u8) !bool {
-    var dir = try std.fs.cwd().openDir(path, .{});
-    defer dir.close();
-    const stat = try dir.stat();
-    return stat.kind == std.fs.File.Kind.directory;
-}
-
-const extensions = [_][]const u8{
-    "aif",
-    "AIF",
-    "aiff",
-    "AIFF",
-    "wav",
-    "WAV",
-    "wave",
-    "WAVE",
-};
-
-fn hasSupportedExtension(name: []const u8) bool {
-    if (std.mem.lastIndexOf(u8, name, ".")) |i| {
-        const ext = name[i + 1 .. name.len];
-        for (extensions) |e| {
-            if (std.mem.eql(u8, ext, e)) return true;
-        }
-    }
-    return false;
-}
-
 fn showList(
     allocator: std.mem.Allocator,
-    files: FileList,
+    files: file_list.FileList,
     stdout: anytype,
     err_writer: std.io.AnyWriter,
 ) !bool {
@@ -227,7 +151,7 @@ fn padding(allocator: std.mem.Allocator, s: []const u8, total_length: u16) ![]co
 
 fn showCounts(
     allocator: std.mem.Allocator,
-    files: FileList,
+    files: file_list.FileList,
     stdout: anytype,
     err_writer: std.io.AnyWriter,
 ) !bool {
