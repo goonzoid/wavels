@@ -82,8 +82,6 @@ pub fn main() !void {
         std.process.exit(0);
     }
 
-    const err_writer = if (res.args.debug != 0) stderr.any() else std.io.null_writer.any();
-
     const recurse = res.args.recurse != 0;
 
     const files = switch (res.positionals.len) {
@@ -98,9 +96,11 @@ pub fn main() !void {
             res.positionals,
             &extensions,
             recurse,
-            err_writer, // TODO: this should probably NOT respect the debug flag
+            stderr.any(),
         ),
     };
+
+    const err_writer = if (res.args.debug != 0) stderr.any() else std.io.null_writer.any();
 
     const any_errors = switch (res.args.count) {
         0 => try showList(allocator, files, stdout, err_writer),
