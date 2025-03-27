@@ -58,14 +58,19 @@ pub fn main() !void {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    const res = clap.parse(clap.Help, &params, clap.parsers.default, .{ .allocator = allocator }) catch |err|
+    const res = clap.parse(
+        clap.Help,
+        &params,
+        clap.parsers.default,
+        .{ .allocator = allocator },
+    ) catch |err|
         switch (err) {
-        error.InvalidArgument => {
-            _ = try stderr.print(help_header_fmt, .{version});
-            std.process.exit(1);
-        },
-        else => return err,
-    };
+            error.InvalidArgument => {
+                _ = try stderr.print(help_header_fmt, .{version});
+                std.process.exit(1);
+            },
+            else => return err,
+        };
     defer res.deinit();
 
     if (res.args.version != 0) {
@@ -93,7 +98,7 @@ pub fn main() !void {
         ),
         else => try file_list.buildFromArgs(
             allocator,
-            res.positionals,
+            res.positionals[0],
             &extensions,
             recurse,
             stderr.any(),

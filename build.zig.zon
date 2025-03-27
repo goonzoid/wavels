@@ -1,10 +1,12 @@
 .{
-    .name = "wavels",
+    .name = .wavels,
     .version = "0.1.0",
+    .fingerprint = 0x3bb30814a599476,
+    .minimum_zig_version = "0.14.0",
     .dependencies = .{
         .clap = .{
-            .url = "https://github.com/Hejsil/zig-clap/archive/0.9.1.tar.gz",
-            .hash = "122062d301a203d003547b414237229b09a7980095061697349f8bef41be9c30266b",
+            .url = "https://github.com/Hejsil/zig-clap/archive/0.10.0.tar.gz",
+            .hash = "clap-0.10.0-oBajB434AQBDh-Ei3YtoKIRxZacVPF1iSwp3IX_ZB8f0",
         },
     },
     .paths = .{""},
