@@ -1,9 +1,9 @@
 const std = @import("std");
 const builtin = @import("builtin");
 const clap = @import("clap");
+const pcm = @import("pcm");
 
 const file_list = @import("./file_list.zig");
-const pcm = @import("./pcm.zig");
 
 test {
     std.testing.refAllDecls(@This());
