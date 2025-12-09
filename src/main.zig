@@ -49,10 +49,12 @@ const extensions = [_][]const u8{
 const unreadable_or_unsupported = "unreadable or unsupported";
 
 pub fn main() !void {
-    const stdout_file = std.io.getStdOut().writer();
-    var stdout_bw = std.io.bufferedWriter(stdout_file);
-    const stdout = stdout_bw.writer();
-    const stderr = std.io.getStdErr().writer();
+    var stdout_buffer: [1024]u8 = undefined;
+    var stdout_writer = std.fs.File.stdout().writer(&stdout_buffer);
+    const stdout = &stdout_writer.interface;
+
+    var stderr_writer = std.fs.File.stderr().writer(&.{});
+    const stderr = &stderr_writer.interface;
 
     var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
     defer arena.deinit();
@@ -66,7 +68,7 @@ pub fn main() !void {
     ) catch |err|
         switch (err) {
             error.InvalidArgument => {
-                _ = try stderr.print(help_header_fmt, .{version});
+                try stderr.print(help_header_fmt, .{version});
                 std.process.exit(1);
             },
             else => return err,
@@ -74,16 +76,16 @@ pub fn main() !void {
     defer res.deinit();
 
     if (res.args.version != 0) {
-        _ = try stdout.print(
+        try stdout.print(
             "wavels {s}\nbuilt with zig {s}",
             .{ version, builtin.zig_version_string },
         );
-        try stdout_bw.flush();
+        try stdout.flush();
         std.process.exit(0);
     }
     if (res.args.help != 0) {
-        _ = try stdout.print(help_header_fmt, .{version});
-        try stdout_bw.flush();
+        try stdout.print(help_header_fmt, .{version});
+        try stdout.flush();
         std.process.exit(0);
     }
 
@@ -101,18 +103,18 @@ pub fn main() !void {
             res.positionals[0],
             &extensions,
             recurse,
-            stderr.any(),
+            stderr,
         ),
     };
 
-    const err_writer = if (res.args.debug != 0) stderr.any() else std.io.null_writer.any();
+    const err_writer = if (res.args.debug != 0) stderr else null;
 
     const any_errors = switch (res.args.count) {
         0 => try showList(allocator, files, stdout, err_writer),
         else => try showCounts(allocator, files, stdout, err_writer),
     };
 
-    try stdout_bw.flush();
+    try stdout.flush();
 
     if (any_errors) std.process.exit(1);
 }
@@ -121,15 +123,15 @@ fn showList(
     allocator: std.mem.Allocator,
     files: file_list.FileList,
     stdout: anytype,
-    err_writer: std.io.AnyWriter,
+    err_writer: ?*std.io.Writer,
 ) !bool {
     var any_errors = false;
     for (files.paths) |file| {
         var err_info: [pcm.max_err_info_size]u8 = undefined;
         const info = pcm.readInfo(file, &err_info) catch |err| {
             any_errors = true;
-            _ = try err_writer.print("{s} {}: {s}\n", .{ file, err, err_info });
-            _ = try stdout.print("{s}{s}{s}\n", .{
+            if (err_writer) |w| try w.print("{s} {}: {s}\n", .{ file, err, err_info });
+            try stdout.print("{s}{s}{s}\n", .{
                 file,
                 try padding(allocator, file, files.max_length),
                 unreadable_or_unsupported,
@@ -137,7 +139,7 @@ fn showList(
             continue;
         };
 
-        _ = try stdout.print("{s}{s}{d} khz {d} bit {s}\n", .{
+        try stdout.print("{s}{s}{d} khz {d} bit {s}\n", .{
             file,
             try padding(allocator, file, files.max_length),
             info.sample_rate,
@@ -158,16 +160,16 @@ fn showCounts(
     allocator: std.mem.Allocator,
     files: file_list.FileList,
     stdout: anytype,
-    err_writer: std.io.AnyWriter,
+    err_writer: ?*std.io.Writer,
 ) !bool {
-    var counters = std.ArrayList(Counter).init(allocator);
+    var counters = std.ArrayList(Counter).empty;
     var err_counter = Counter.initNull();
 
     for (files.paths) |file| {
         var err_info: [pcm.max_err_info_size]u8 = undefined;
         const info = pcm.readInfo(file, &err_info) catch |err| {
             err_counter.count += 1;
-            _ = try err_writer.print("{s} {}: {s}\n", .{ file, err, err_info });
+            if (err_writer) |w| try w.print("{s} {}: {s}\n", .{ file, err, err_info });
             continue;
         };
 
@@ -181,12 +183,12 @@ fn showCounts(
         }
         if (!counted) {
             const counter = Counter.init(info);
-            try counters.append(counter);
+            try counters.append(allocator, counter);
         }
     }
 
     for (counters.items) |counter| {
-        _ = try stdout.print("{d}\t{d} khz {d} bit {s}\n", .{
+        try stdout.print("{d}\t{d} khz {d} bit {s}\n", .{
             counter.count,
             counter.sample_rate,
             counter.bit_depth,
@@ -194,7 +196,7 @@ fn showCounts(
         });
     }
     if (err_counter.count > 0) {
-        _ = try stdout.print("{d}\t{s}\n", .{
+        try stdout.print("{d}\t{s}\n", .{
             err_counter.count,
             unreadable_or_unsupported,
         });

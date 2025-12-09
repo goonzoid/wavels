@@ -14,7 +14,7 @@ pub fn build(
     var dir = try std.fs.cwd().openDir(dir_path, .{});
     defer dir.close();
 
-    var files = std.ArrayList([]const u8).init(allocator);
+    var files = std.ArrayList([]const u8).empty;
     var max_length: u16 = 0;
 
     if (recurse) {
@@ -23,7 +23,7 @@ pub fn build(
         while (try walker.next()) |we| {
             if (extensionMatches(we.basename, extensions)) {
                 const path = try dotlessPath(allocator, dir_path, we.path);
-                try files.append(path);
+                try files.append(allocator, path);
                 max_length = @max(max_length, @as(u16, @intCast(path.len)));
             }
         }
@@ -32,7 +32,7 @@ pub fn build(
         while (try it.next()) |f| {
             if (extensionMatches(f.name, extensions)) {
                 const path = try dotlessPath(allocator, dir_path, f.name);
-                try files.append(path);
+                try files.append(allocator, path);
                 max_length = @max(max_length, @as(u16, @intCast(path.len)));
             }
         }
@@ -46,19 +46,19 @@ pub fn buildFromArgs(
     args: []const []const u8,
     extensions: []const []const u8,
     recurse: bool,
-    err_writer: std.io.AnyWriter,
+    err_writer: *std.io.Writer,
 ) !FileList {
-    var files = std.ArrayList([]const u8).init(allocator);
+    var files = std.ArrayList([]const u8).empty;
     var max_length: u16 = 0;
 
     for (args) |path| {
         if (extensionMatches(path, extensions)) {
             max_length = @max(max_length, @as(u16, @intCast(path.len)));
-            try files.append(path);
+            try files.append(allocator, path);
         } else if (try isDir(path)) {
             const dir_files = try build(allocator, path, extensions, recurse);
             max_length = @max(max_length, @as(u16, @intCast(dir_files.max_length)));
-            try files.appendSlice(dir_files.paths);
+            try files.appendSlice(allocator, dir_files.paths);
         } else {
             try err_writer.print("{s} - unsupported file type", .{path});
         }

@@ -2,15 +2,15 @@
     .name = .wavels,
     .version = "0.1.0",
     .fingerprint = 0x3bb30814a599476,
-    .minimum_zig_version = "0.14.0",
+    .minimum_zig_version = "0.15.2",
     .dependencies = .{
         .clap = .{
-            .url = "https://github.com/Hejsil/zig-clap/archive/0.10.0.tar.gz",
-            .hash = "clap-0.10.0-oBajB434AQBDh-Ei3YtoKIRxZacVPF1iSwp3IX_ZB8f0",
+            .url = "git+https://github.com/Hejsil/zig-clap?ref=0.11.0#5289e0753cd274d65344bef1c114284c633536ea",
+            .hash = "clap-0.11.0-oBajB-HnAQDPCKYzwF7rO3qDFwRcD39Q0DALlTSz5H7e",
         },
         .pcm = .{
-            .url = "git+https://github.com/goonzoid/pcm.git#47c26789aee10c4b50edaf790a72081b5edeb7ab",
-            .hash = "pcm-0.0.0-hb7grVceAABukH47P63qaZj9qFVT_1POesI1PsYg3TJj",
+            .url = "git+https://github.com/goonzoid/pcm.git#0484a98a9537b703a9298b5959f2093ef0dcf755",
+            .hash = "pcm-0.0.0-hb7grf8uAABmtt0zJ_ZJN8v85MUiXuHEpwHGzUHK77cd",
         },
     },
     .paths = .{""},
