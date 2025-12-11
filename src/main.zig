@@ -1,13 +1,14 @@
 const std = @import("std");
 const builtin = @import("builtin");
+const options = @import("options");
 const clap = @import("clap");
 const pcm = @import("pcm");
 
 const file_list = @import("file_list.zig");
 
-test {
-    std.testing.refAllDecls(@This());
-}
+pub const std_options: std.Options = .{
+    .log_level = .info,
+};
 
 const version = "0.1.0";
 const help_header_fmt =
@@ -248,4 +249,8 @@ fn channelCount(count: u16) ![]const u8 {
             break :blk result;
         },
     };
+}
+
+test {
+    std.testing.refAllDecls(@This());
 }
