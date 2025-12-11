@@ -32,8 +32,15 @@ pub fn build(b: *std.Build) void {
         run_cmd.addArgs(args);
     }
 
-    const run_step = b.step("run", "Run the app");
+    const run_step = b.step("run", "Run the program");
     run_step.dependOn(&run_cmd.step);
+
+    const check_exe = b.addExecutable(.{
+        .name = exe.name,
+        .root_module = exe.root_module,
+    });
+    const check = b.step("check", "Check if the program compiles");
+    check.dependOn(&check_exe.step);
 
     const run_unit_tests = b.addRunArtifact(b.addTest(.{
         .root_module = exe_mod,
