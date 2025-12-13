@@ -37,14 +37,10 @@ const params = clap.parseParamsComptime(
 );
 
 const extensions = [_][]const u8{
-    "aif",
-    "AIF",
-    "aiff",
-    "AIFF",
-    "wav",
-    "WAV",
-    "wave",
-    "WAVE",
+    "aif",  "AIF",
+    "aiff", "AIFF",
+    "wav",  "WAV",
+    "wave", "WAVE",
 };
 
 const unreadable_or_unsupported = "unreadable or unsupported";
