@@ -192,6 +192,7 @@ fn showCounts(
             try channelCount(counter.channels),
         });
     }
+    try stdout.print("{d}\ttotal\n", .{files.paths.len - err_counter.count});
     if (err_counter.count > 0) {
         try stdout.print("{d}\t{s}\n", .{
             err_counter.count,
