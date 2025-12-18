@@ -119,16 +119,16 @@ pub fn main() !void {
 fn showList(
     allocator: std.mem.Allocator,
     files: file_list.FileList,
-    stdout: anytype,
-    err_writer: ?*std.io.Writer,
+    w: *std.Io.Writer,
+    err_w: ?*std.Io.Writer,
 ) !bool {
     var any_errors = false;
     for (files.paths) |file| {
         var err_info: [pcm.max_err_info_size]u8 = undefined;
         const info = pcm.readInfo(file, &err_info) catch |err| {
             any_errors = true;
-            if (err_writer) |w| try w.print("{s} {}: {s}\n", .{ file, err, err_info });
-            try stdout.print("{s}{s}{s}\n", .{
+            if (err_w) |ew| try ew.print("{s} {}: {s}\n", .{ file, err, err_info });
+            try w.print("{s}{s}{s}\n", .{
                 file,
                 try padding(allocator, file, files.max_length),
                 unreadable_or_unsupported,
@@ -136,7 +136,7 @@ fn showList(
             continue;
         };
 
-        try stdout.print("{s}{s}{d} khz {d} bit {s}\n", .{
+        try w.print("{s}{s}{d} khz {d} bit {s}\n", .{
             file,
             try padding(allocator, file, files.max_length),
             info.sample_rate,
@@ -156,8 +156,8 @@ fn padding(allocator: std.mem.Allocator, s: []const u8, total_length: u16) ![]co
 fn showCounts(
     allocator: std.mem.Allocator,
     files: file_list.FileList,
-    stdout: anytype,
-    err_writer: ?*std.io.Writer,
+    w: *std.Io.Writer,
+    err_w: ?*std.Io.Writer,
 ) !bool {
     var counters = std.ArrayList(Counter).empty;
     var err_counter = Counter.initNull();
@@ -166,7 +166,7 @@ fn showCounts(
         var err_info: [pcm.max_err_info_size]u8 = undefined;
         const info = pcm.readInfo(file, &err_info) catch |err| {
             err_counter.count += 1;
-            if (err_writer) |w| try w.print("{s} {}: {s}\n", .{ file, err, err_info });
+            if (err_w) |ew| try ew.print("{s} {}: {s}\n", .{ file, err, err_info });
             continue;
         };
 
@@ -185,16 +185,16 @@ fn showCounts(
     }
 
     for (counters.items) |counter| {
-        try stdout.print("{d}\t{d} khz {d} bit {s}\n", .{
+        try w.print("{d}\t{d} khz {d} bit {s}\n", .{
             counter.count,
             counter.sample_rate,
             counter.bit_depth,
             try channelCount(counter.channels),
         });
     }
-    try stdout.print("{d}\ttotal\n", .{files.paths.len - err_counter.count});
+    try w.print("{d}\ttotal\n", .{files.paths.len - err_counter.count});
     if (err_counter.count > 0) {
-        try stdout.print("{d}\t{s}\n", .{
+        try w.print("{d}\t{s}\n", .{
             err_counter.count,
             unreadable_or_unsupported,
         });

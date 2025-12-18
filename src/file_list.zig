@@ -46,7 +46,7 @@ pub fn buildFromArgs(
     args: []const []const u8,
     extensions: []const []const u8,
     recurse: bool,
-    err_writer: *std.io.Writer,
+    err_w: *std.Io.Writer,
 ) !FileList {
     var files = std.ArrayList([]const u8).empty;
     var max_length: u16 = 0;
@@ -60,7 +60,7 @@ pub fn buildFromArgs(
             max_length = @max(max_length, @as(u16, @intCast(dir_files.max_length)));
             try files.appendSlice(allocator, dir_files.paths);
         } else {
-            try err_writer.print("{s} - unsupported file type", .{path});
+            try err_w.print("{s} - unsupported file type", .{path});
         }
     }
 
