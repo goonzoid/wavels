@@ -9,8 +9,8 @@
             .hash = "clap-0.11.0-oBajB-HnAQDPCKYzwF7rO3qDFwRcD39Q0DALlTSz5H7e",
         },
         .pcm = .{
-            .url = "git+https://github.com/goonzoid/pcm.git#0484a98a9537b703a9298b5959f2093ef0dcf755",
-            .hash = "pcm-0.0.0-hb7grf8uAABmtt0zJ_ZJN8v85MUiXuHEpwHGzUHK77cd",
+            .url = "git+https://github.com/goonzoid/pcm.git#c639a82601d4bf49864c50d07a5033ffcaded873",
+            .hash = "pcm-0.0.0-hb7grSssAADe_AinYN4Mkbv3bxAb_Eja4wl1f-jGl9Ct",
         },
     },
     .paths = .{""},

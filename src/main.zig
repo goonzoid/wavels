@@ -124,10 +124,10 @@ fn showList(
 ) !bool {
     var any_errors = false;
     for (files.paths) |file| {
-        var err_info: [pcm.max_err_info_size]u8 = undefined;
-        const info = pcm.readInfo(file, &err_info) catch |err| {
+        var d: pcm.Diagnostics = undefined;
+        const info = pcm.readFormat(file, &d) catch |err| {
             any_errors = true;
-            if (err_w) |ew| try ew.print("{s} {}: {s}\n", .{ file, err, err_info });
+            if (err_w) |ew| try ew.print("{s} {}: {s}\n", .{ file, err, d.chunk_id });
             try w.print("{s}{s}{s}\n", .{
                 file,
                 try padding(allocator, file, files.max_length),
@@ -163,10 +163,10 @@ fn showCounts(
     var err_counter = Counter.initNull();
 
     for (files.paths) |file| {
-        var err_info: [pcm.max_err_info_size]u8 = undefined;
-        const info = pcm.readInfo(file, &err_info) catch |err| {
+        var d: pcm.Diagnostics = undefined;
+        const info = pcm.readFormat(file, &d) catch |err| {
             err_counter.count += 1;
-            if (err_w) |ew| try ew.print("{s} {}: {s}\n", .{ file, err, err_info });
+            if (err_w) |ew| try ew.print("{s} {}: {s}\n", .{ file, err, d.chunk_id });
             continue;
         };
 
@@ -209,7 +209,7 @@ const Counter = struct {
     bit_depth: u16,
     channels: u16,
 
-    fn init(info: pcm.PCMInfo) @This() {
+    fn init(info: pcm.Format) @This() {
         return .{
             .count = 1,
             .sample_rate = info.sample_rate,
@@ -227,7 +227,7 @@ const Counter = struct {
         };
     }
 
-    fn matches(self: @This(), other: pcm.PCMInfo) bool {
+    fn matches(self: @This(), other: pcm.Format) bool {
         return self.sample_rate == other.sample_rate and
             self.bit_depth == other.bit_depth and
             self.channels == other.channels;
